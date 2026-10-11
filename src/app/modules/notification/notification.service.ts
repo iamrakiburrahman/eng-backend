@@ -2,6 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import ApiError from "../../../errors/ApiErrors";
 import QueryBuilder from "../../../util/queryBuilder";
 import { Notification } from "./notification.model";
+import { getNotificationCategory } from "../../../helpers/notificationsHelper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYER: GET OWN NOTIFICATIONS (paginated)
@@ -18,8 +19,14 @@ const getMyNotifications = async (
     .paginate()
     .fields();
 
-  const result = await notificationQuery.modelQuery;
+  const rawResult = await notificationQuery.modelQuery.lean();
   const meta = await notificationQuery.getPaginationInfo();
+
+  // Guarantee that every notification returned has a non-null, valid category
+  const result = (rawResult || []).map((notif: any) => ({
+    ...notif,
+    category: notif.category || getNotificationCategory(notif.type),
+  }));
 
   return { meta, result };
 };
