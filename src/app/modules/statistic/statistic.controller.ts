@@ -118,6 +118,18 @@ const getTopOverallPlayers = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// 5. UNIFIED LEADERBOARDS (Weekly, Monthly, Overall)
+const getLeaderboards = catchAsync(async (req: Request, res: Response) => {
+  const result = await StatisticService.getLeaderboardsFromDB(req.query);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: "Leaderboards retrieved successfully",
+    data: result,
+  });
+});
+
 export const StatisticController = {
   getTopPlayer,
   getPlayerSeasonStats,
@@ -127,4 +139,5 @@ export const StatisticController = {
   getTopAssists,
   getTopCleanSheets,
   getTopOverallPlayers,
+  getLeaderboards,
 };

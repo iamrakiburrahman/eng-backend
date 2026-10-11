@@ -24,6 +24,9 @@ router.get("/top-clean-sheets", StatisticController.getTopCleanSheets);
 
 router.get("/top-overall-players", StatisticController.getTopOverallPlayers);
 
+// 🏆 UNIFIED LEADERBOARDS (supports ?timeframe=weekly | monthly | overall | all)
+router.get("/leaderboards", StatisticController.getLeaderboards);
+
 router.get(
   "/top-player/:leagueId",
   StatisticController.getTopPlayer

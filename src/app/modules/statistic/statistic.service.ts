@@ -1007,8 +1007,25 @@ const getTopOverallPlayersFromDB = async (query?: Record<string, any>) => {
   const limit = parseInt(query?.limit as string) || defaultLimit;
   const enriched = await getEnrichedPlayersWithStats(query);
 
-  // 🌟 Sorted strictly by MAX COINS (engCoine) descending, then marketValue
+  const tf = (query?.timeframe || query?.period || "overall").toString().toLowerCase();
+  const isPeriodSpecific =
+    tf === "weekly" ||
+    tf === "week" ||
+    tf === "this_week" ||
+    tf === "monthly" ||
+    tf === "month" ||
+    tf === "this_month";
+
+  // When viewing weekly or monthly, sort by performance score earned in that timeframe
+  // When viewing overall, sort strictly by max lifetime coins (engCoine), then marketValue
   const sorted = [...enriched].sort((a, b) => {
+    if (isPeriodSpecific) {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.goals !== a.goals) return b.goals - a.goals;
+      if (b.assists !== a.assists) return b.assists - a.assists;
+      return (b.marketValue || 0) - (a.marketValue || 0);
+    }
+
     const aCoins = Number(a.engCoine) || 0;
     const bCoins = Number(b.engCoine) || 0;
     if (bCoins !== aCoins) return bCoins - aCoins;
@@ -1028,6 +1045,61 @@ const getTopOverallPlayersFromDB = async (query?: Record<string, any>) => {
   return attachRankAndMovement(sorted, baselineCompareFn, limit);
 };
 
+// Helper to fetch leaderboard for a single timeframe
+const fetchLeaderboardByTimeframe = async (query?: Record<string, any>, tf: string = "overall") => {
+  const limit = parseInt(query?.limit as string) || (query?.isHome === "true" ? 20 : 50);
+  const queryWithTf = {
+    ...query,
+    timeframe: tf,
+    limit,
+  };
+
+  const [topGoalScorers, topAssists, topCleanSheets, topOverallPlayers] = await Promise.all([
+    getTopGoalScorersFromDB(queryWithTf),
+    getTopAssistsFromDB(queryWithTf),
+    getTopCleanSheetsFromDB(queryWithTf),
+    getTopOverallPlayersFromDB(queryWithTf),
+  ]);
+
+  return {
+    timeframe: tf,
+    topGoalScorers,
+    topAssists,
+    topCleanSheets,
+    topOverallPlayers,
+  };
+};
+
+// 5. 🏆 UNIFIED LEADERBOARDS (Supports timeframe=weekly | monthly | overall | all)
+const getLeaderboardsFromDB = async (query?: Record<string, any>): Promise<any> => {
+  const requestedTf = (query?.timeframe || query?.period || "overall").toString().toLowerCase();
+
+  // If client requests "all", fetch weekly, monthly, and overall in parallel
+  if (requestedTf === "all") {
+    const [weekly, monthly, overall] = await Promise.all([
+      fetchLeaderboardByTimeframe(query, "weekly"),
+      fetchLeaderboardByTimeframe(query, "monthly"),
+      fetchLeaderboardByTimeframe(query, "overall"),
+    ]);
+
+    return {
+      weekly,
+      monthly,
+      overall,
+    };
+  }
+
+  // Normalize single timeframe
+  let normalizedTf = "overall";
+  if (requestedTf === "weekly" || requestedTf === "week" || requestedTf === "this_week") {
+    normalizedTf = "weekly";
+  } else if (requestedTf === "monthly" || requestedTf === "month" || requestedTf === "this_month") {
+    normalizedTf = "monthly";
+  }
+
+  return fetchLeaderboardByTimeframe(query, normalizedTf);
+};
+
 export const StatisticService = {
   getTopPlayerFromDB,
   getPlayerSeasonStatsFromDB,
@@ -1037,4 +1109,5 @@ export const StatisticService = {
   getTopAssistsFromDB,
   getTopCleanSheetsFromDB,
   getTopOverallPlayersFromDB,
+  getLeaderboardsFromDB,
 };
