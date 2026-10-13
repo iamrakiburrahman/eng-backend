@@ -5,7 +5,6 @@ import { League } from "../league/league.model";
 import { LeagueTeam } from "../leagueTeam/leagueTeam.model";
 import { User } from "../user/user.model";
 import { Team } from "../team/team.model";
-import { News } from "../news/news.model";
 import { Video } from "../video/video.model";
 
 import { USER_ROLES } from "../../../enums/user";
@@ -210,7 +209,196 @@ const getPlayerSeasonStatsFromDB = async (
 };
 
 
-const getLeagueSummaryFromDB = async (query?: Record<string, any>) => {
+// Helper to fetch single-timeframe league summary stats
+const fetchLeagueSummaryStatsByTimeframe = async (
+  query: Record<string, any> | undefined,
+  tf: string = "overall",
+  leagueFilter: any
+) => {
+  const queryWithTf = {
+    ...query,
+    timeframe: tf,
+    limit: 1,
+  };
+
+  const now = new Date();
+  let timeFilter: any = null;
+  if (tf === "this_week" || tf === "week" || tf === "weekly") {
+    const day = now.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() + diffToMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+    timeFilter = { createdAt: { $gte: startOfWeek } };
+  } else if (tf === "this_month" || tf === "month" || tf === "monthly") {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    timeFilter = { createdAt: { $gte: startOfMonth } };
+  }
+
+  const goalMatchFilter: any = {
+    ...leagueFilter,
+    eventType: "goal",
+  };
+  const assistMatchFilter: any = {
+    ...leagueFilter,
+    eventType: "assist",
+  };
+
+  if (timeFilter) {
+    Object.assign(goalMatchFilter, timeFilter);
+    Object.assign(assistMatchFilter, timeFilter);
+  }
+
+  // 1. Fetch top 1 from each category using the unified leaderboard logic
+  // 2. Fetch top goal and assist teams
+  const [
+    topGoalList,
+    topAssistList,
+    topCleanSheetList,
+    topOverallList,
+    topGoalTeam,
+    topAssistTeam,
+  ] = await Promise.all([
+    getTopGoalScorersFromDB(queryWithTf),
+    getTopAssistsFromDB(queryWithTf),
+    getTopCleanSheetsFromDB(queryWithTf),
+    getTopOverallPlayersFromDB(queryWithTf),
+    MatchResult.aggregate([
+      {
+        $match: goalMatchFilter,
+      },
+      {
+        $group: {
+          _id: "$team",
+          totalGoals: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { totalGoals: -1 },
+      },
+      {
+        $limit: 1,
+      },
+      {
+        $lookup: {
+          from: "teams",
+          localField: "_id",
+          foreignField: "_id",
+          as: "team",
+        },
+      },
+      {
+        $unwind: "$team",
+      },
+      {
+        $project: {
+          _id: 0,
+          totalGoals: 1,
+          teamName: "$team.teamName",
+          teamLogo: { $ifNull: ["$team.teamLogo", "$team.logo"] },
+        },
+      },
+    ]),
+    MatchResult.aggregate([
+      {
+        $match: assistMatchFilter,
+      },
+      {
+        $group: {
+          _id: "$team",
+          totalAssists: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { totalAssists: -1 },
+      },
+      {
+        $limit: 1,
+      },
+      {
+        $lookup: {
+          from: "teams",
+          localField: "_id",
+          foreignField: "_id",
+          as: "team",
+        },
+      },
+      {
+        $unwind: "$team",
+      },
+      {
+        $project: {
+          _id: 0,
+          totalAssists: 1,
+          teamName: "$team.teamName",
+          teamLogo: { $ifNull: ["$team.teamLogo", "$team.logo"] },
+        },
+      },
+    ]),
+  ]);
+
+  const defaultPlayer = {
+    _id: null,
+    playerId: null,
+    firstName: "",
+    lastName: "",
+    userName: "",
+    profile: "",
+    jerseyNumber: null,
+    position: null,
+    ageGroup: null,
+    team: null,
+    marketValue: 0,
+    engCoine: 0,
+    goals: 0,
+    totalGoals: 0,
+    assists: 0,
+    totalAssists: 0,
+    cleanSheets: 0,
+    totalCleanSheets: 0,
+    playerOfTheDay: 0,
+    totalPlayerOfTheDay: 0,
+    score: 0,
+    stats: {
+      goals: 0,
+      assists: 0,
+      cleanSheets: 0,
+      playerOfTheDay: 0,
+      yellowCards: 0,
+      redCards: 0,
+      score: 0,
+    },
+  };
+
+  const topGoalScorer = topGoalList[0] || defaultPlayer;
+  const topAssistPlayer = topAssistList[0] || defaultPlayer;
+  const topCleanSheetPlayer = topCleanSheetList[0] || defaultPlayer;
+  const topOverallPlayer = topOverallList[0] || defaultPlayer;
+
+  return {
+    timeframe: tf,
+    topGoalScorer,
+    topAssistPlayer,
+    topCleanSheetPlayer,
+    topCleanSheet: topCleanSheetPlayer,
+    topOverallPlayer,
+    topOverall: topOverallPlayer,
+    topGoalTeam: topGoalTeam[0] || {
+      totalGoals: 0,
+      teamName: "",
+      teamLogo: "",
+    },
+    topAssistTeam: topAssistTeam[0] || {
+      totalAssists: 0,
+      teamName: "",
+      teamLogo: "",
+    },
+  };
+};
+
+// 🏆 LEAGUE SUMMARY (Supports timeframe=weekly | monthly | overall | all, articles excluded per request)
+const getLeagueSummaryFromDB = async (query?: Record<string, any>): Promise<any> => {
   const { leagueName, leagueId, league, season } = query || {};
   const directLeagueId = leagueId || (league && mongoose.Types.ObjectId.isValid(league as string) ? league : null);
 
@@ -252,163 +440,47 @@ const getLeagueSummaryFromDB = async (query?: Record<string, any>) => {
     ];
   }
 
-  // 1. Fetch top 1 from each category using the unified leaderboard logic
-  const [topGoalList, topAssistList, topCleanSheetList, topOverallList] =
-    await Promise.all([
-      getTopGoalScorersFromDB({ ...query, limit: 1 }),
-      getTopAssistsFromDB({ ...query, limit: 1 }),
-      getTopCleanSheetsFromDB({ ...query, limit: 1 }),
-      getTopOverallPlayersFromDB({ ...query, limit: 1 }),
+  // Videos only (Articles excluded per request)
+  const videosPromise = Video.find()
+    .sort({ createdAt: -1 })
+    .limit(6)
+    .select("title description videoUrl thumbnail duration createdAt")
+    .lean();
+
+  const requestedTf = (query?.timeframe || query?.period || "overall").toString().toLowerCase();
+
+  // If client requests "all", return weekly, monthly, and overall in parallel
+  if (requestedTf === "all") {
+    const [weekly, monthly, overall, videos] = await Promise.all([
+      fetchLeagueSummaryStatsByTimeframe(query, "weekly", leagueFilter),
+      fetchLeagueSummaryStatsByTimeframe(query, "monthly", leagueFilter),
+      fetchLeagueSummaryStatsByTimeframe(query, "overall", leagueFilter),
+      videosPromise,
     ]);
 
-  const defaultPlayer = {
-    _id: null,
-    playerId: null,
-    firstName: "",
-    lastName: "",
-    userName: "",
-    profile: "",
-    jerseyNumber: null,
-    position: null,
-    ageGroup: null,
-    team: null,
-    marketValue: 0,
-    engCoine: 0,
-    goals: 0,
-    totalGoals: 0,
-    assists: 0,
-    totalAssists: 0,
-    cleanSheets: 0,
-    totalCleanSheets: 0,
-    playerOfTheDay: 0,
-    totalPlayerOfTheDay: 0,
-    score: 0,
-    stats: {
-      goals: 0,
-      assists: 0,
-      cleanSheets: 0,
-      playerOfTheDay: 0,
-      yellowCards: 0,
-      redCards: 0,
-      score: 0,
-    },
-  };
+    return {
+      weekly,
+      monthly,
+      overall,
+      videos,
+    };
+  }
 
-  const topGoalScorer = topGoalList[0] || defaultPlayer;
-  const topAssistPlayer = topAssistList[0] || defaultPlayer;
-  const topCleanSheetPlayer = topCleanSheetList[0] || defaultPlayer;
-  const topOverallPlayer = topOverallList[0] || defaultPlayer;
+  // Normalize single timeframe
+  let normalizedTf = "overall";
+  if (requestedTf === "weekly" || requestedTf === "week" || requestedTf === "this_week") {
+    normalizedTf = "weekly";
+  } else if (requestedTf === "monthly" || requestedTf === "month" || requestedTf === "this_month") {
+    normalizedTf = "monthly";
+  }
 
-  // 2. Team Stats for League & Related Media (Articles & Videos)
-  const [topGoalTeam, topAssistTeam, articles, videos] = await Promise.all([
-    MatchResult.aggregate([
-      {
-        $match: {
-          ...leagueFilter,
-          eventType: "goal",
-        },
-      },
-      {
-        $group: {
-          _id: "$team",
-          totalGoals: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { totalGoals: -1 },
-      },
-      {
-        $limit: 1,
-      },
-      {
-        $lookup: {
-          from: "teams",
-          localField: "_id",
-          foreignField: "_id",
-          as: "team",
-        },
-      },
-      {
-        $unwind: "$team",
-      },
-      {
-        $project: {
-          _id: 0,
-          totalGoals: 1,
-          teamName: "$team.teamName",
-          teamLogo: { $ifNull: ["$team.teamLogo", "$team.logo"] },
-        },
-      },
-    ]),
-    MatchResult.aggregate([
-      {
-        $match: {
-          ...leagueFilter,
-          eventType: "assist",
-        },
-      },
-      {
-        $group: {
-          _id: "$team",
-          totalAssists: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { totalAssists: -1 },
-      },
-      {
-        $limit: 1,
-      },
-      {
-        $lookup: {
-          from: "teams",
-          localField: "_id",
-          foreignField: "_id",
-          as: "team",
-        },
-      },
-      {
-        $unwind: "$team",
-      },
-      {
-        $project: {
-          _id: 0,
-          totalAssists: 1,
-          teamName: "$team.teamName",
-          teamLogo: { $ifNull: ["$team.teamLogo", "$team.logo"] },
-        },
-      },
-    ]),
-    News.find({ status: "publish" })
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .select("title category description image createdAt")
-      .lean(),
-    Video.find()
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .select("title description videoUrl thumbnail duration createdAt")
-      .lean(),
+  const [stats, videos] = await Promise.all([
+    fetchLeagueSummaryStatsByTimeframe(query, normalizedTf, leagueFilter),
+    videosPromise,
   ]);
 
   return {
-    topGoalScorer,
-    topAssistPlayer,
-    topCleanSheetPlayer,
-    topCleanSheet: topCleanSheetPlayer,
-    topOverallPlayer,
-    topOverall: topOverallPlayer,
-    topGoalTeam: topGoalTeam[0] || {
-      totalGoals: 0,
-      teamName: "",
-      teamLogo: "",
-    },
-    topAssistTeam: topAssistTeam[0] || {
-      totalAssists: 0,
-      teamName: "",
-      teamLogo: "",
-    },
-    articles,
+    ...stats,
     videos,
   };
 };

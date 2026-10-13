@@ -15,7 +15,7 @@ router.get(
 );
 
 
-// 🏆 TOP 20 LEADERBOARDS
+// TOP 20 LEADERBOARDS
 router.get("/top-goal-scorers", StatisticController.getTopGoalScorers);
 
 router.get("/top-assists", StatisticController.getTopAssists);
@@ -24,7 +24,7 @@ router.get("/top-clean-sheets", StatisticController.getTopCleanSheets);
 
 router.get("/top-overall-players", StatisticController.getTopOverallPlayers);
 
-// 🏆 UNIFIED LEADERBOARDS (supports ?timeframe=weekly | monthly | overall | all)
+// UNIFIED LEADERBOARDS (supports ?timeframe=weekly | monthly | overall | all)
 router.get("/leaderboards", StatisticController.getLeaderboards);
 
 router.get(
