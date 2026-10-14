@@ -391,6 +391,15 @@ export const cleanupWorker = new Worker<CleanupJobData>(
                          }
                          break;
 
+                    case 'tournament-status-sync':
+                         const { TournamentService: TournService } = require('../../app/modules/tournament/tournament.service');
+                         const tournSyncRes = await TournService.syncTournamentStatusesInDB();
+                         const totalUpdated = (tournSyncRes?.activated || 0) + (tournSyncRes?.completed || 0) + (tournSyncRes?.upcoming || 0);
+                         if (totalUpdated > 0) {
+                              logger.info(colors.green(`[BullMQ] Tournament status auto-sync: ${tournSyncRes.activated} activated, ${tournSyncRes.completed} completed, ${tournSyncRes.upcoming} upcoming`));
+                         }
+                         break;
+
                     default:
                          logger.warn(colors.yellow(`Unknown cleanup type: ${type}`));
                }

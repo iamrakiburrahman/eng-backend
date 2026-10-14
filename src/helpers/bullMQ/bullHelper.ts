@@ -340,6 +340,12 @@ export class CleanupQueueHelper {
                     { repeat: { pattern: '*/10 * * * *' } } as any
                );
 
+               await cleanupQueue.add(
+                    'tournament-status-sync',
+                    { type: 'tournament-status-sync' },
+                    { repeat: { pattern: '*/5 * * * *' } } as any
+               );
+
                logger.info(colors.green('[BullMQ] Repeatable background jobs scheduled successfully in Redis'));
           } catch (error) {
                logger.error(colors.red('Failed to schedule BullMQ background jobs:'), error);

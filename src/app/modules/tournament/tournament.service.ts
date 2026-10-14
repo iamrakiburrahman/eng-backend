@@ -9,6 +9,80 @@ import { Subscription } from "../subscription/subscription.model";
 import { PlayerEconomy } from "../coinAndBudget/playerEconomySchema.model";
 import { recordCoinTransaction } from "../../../helpers/coinLedgerHelper";
 import { COIN_TRANSACTION_CATEGORY } from "../coinTransaction/coinTransaction.interface";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const getUKNow = (): Date => {
+  return dayjs().tz("Europe/London").toDate();
+};
+
+const calculateTournamentStatus = (
+  start: Date,
+  end: Date,
+  now: Date = getUKNow(),
+): "upcoming" | "active" | "completed" => {
+  if (now < start) {
+    return "upcoming";
+  }
+  if (now >= start && now <= end) {
+    return "active";
+  }
+  return "completed";
+};
+
+const syncTournamentStatusesInDB = async (): Promise<{
+  activated: number;
+  completed: number;
+  upcoming: number;
+}> => {
+  const now = getUKNow();
+
+  const [completedResult, activeResult, upcomingResult] = await Promise.all([
+    // 1. Tournaments whose endDate has passed -> completed
+    Tournament.updateMany(
+      {
+        status: { $nin: ["completed", "cancelled"] },
+        endDate: { $lte: now },
+      },
+      {
+        $set: { status: "completed" },
+      },
+    ),
+
+    // 2. Tournaments whose startDate has arrived and endDate has not passed -> active
+    Tournament.updateMany(
+      {
+        status: { $nin: ["active", "cancelled"] },
+        startDate: { $lte: now },
+        endDate: { $gt: now },
+      },
+      {
+        $set: { status: "active" },
+      },
+    ),
+
+    // 3. Tournaments whose startDate is still in the future -> upcoming
+    Tournament.updateMany(
+      {
+        status: { $nin: ["upcoming", "cancelled"] },
+        startDate: { $gt: now },
+      },
+      {
+        $set: { status: "upcoming" },
+      },
+    ),
+  ]);
+
+  return {
+    completed: completedResult.modifiedCount || 0,
+    activated: activeResult.modifiedCount || 0,
+    upcoming: upcomingResult.modifiedCount || 0,
+  };
+};
 
 const createTournamentToDB = async (
   payload: Partial<ITournament>,
@@ -40,8 +114,15 @@ const createTournamentToDB = async (
     );
   }
 
+  // Auto calculate status if client didn't explicitly specify 'cancelled', or if status wasn't supplied
+  let determinedStatus = payload.status;
+  if (!determinedStatus || determinedStatus !== "cancelled") {
+    determinedStatus = calculateTournamentStatus(start, end);
+  }
+
   const result = await Tournament.create({
     ...payload,
+    status: determinedStatus,
     startDate: start,
     endDate: end,
     createdBy: userId,
@@ -51,6 +132,8 @@ const createTournamentToDB = async (
 };
 
 const getAllTournamentsFromDB = async (query: Record<string, any>) => {
+  await syncTournamentStatusesInDB();
+
   const tournamentQuery = new QueryBuilder(Tournament.find(), query)
     .search(["title", "description"])
     .filter()
@@ -70,6 +153,7 @@ const getAllTournamentsFromDB = async (query: Record<string, any>) => {
 const getSingleTournamentFromDB = async (
   id: string,
 ): Promise<ITournament | null> => {
+  await syncTournamentStatusesInDB();
   const result = await Tournament.findById(id).populate({
     path: "redeemedPlayers.player",
     select:
@@ -105,7 +189,17 @@ const updateTournamentInDB = async (
     }
   }
 
-  const result = await Tournament.findByIdAndUpdate(id, payload, {
+  const updatePayload: Partial<ITournament> = { ...payload };
+
+  // If client explicitly passed status (e.g. 'cancelled', 'completed', 'active'), keep it
+  // If client did NOT explicitly pass status and existing status is not 'cancelled', auto-determine status based on dates
+  if (!payload.status && isExist.status !== "cancelled") {
+    const start = payload.startDate ? new Date(payload.startDate) : new Date(isExist.startDate);
+    const end = payload.endDate ? new Date(payload.endDate) : new Date(isExist.endDate);
+    updatePayload.status = calculateTournamentStatus(start, end);
+  }
+
+  const result = await Tournament.findByIdAndUpdate(id, updatePayload, {
     new: true,
     runValidators: true,
   });
@@ -405,6 +499,7 @@ const redeemTournamentRewardInDB = async (
 };
 
 const getTournamentAnalyticsFromDB = async () => {
+  await syncTournamentStatusesInDB();
   const [total, active, upcoming, completed] = await Promise.all([
     Tournament.countDocuments(),
     Tournament.countDocuments({ status: { $in: ['active', 'ongoing'] } }),
@@ -429,4 +524,5 @@ export const TournamentService = {
   getTournamentQrCodeFromDB,
   redeemTournamentRewardInDB,
   getTournamentAnalyticsFromDB,
+  syncTournamentStatusesInDB,
 };
