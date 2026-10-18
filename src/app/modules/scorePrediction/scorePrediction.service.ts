@@ -317,7 +317,9 @@ const settlePredictionRoundInDB = async (roundId: string): Promise<any> => {
       totalCoins += coinForThis;
 
       return {
-        ...p.toObject(),
+        match: p.match,
+        predictedHomeScore: p.predictedHomeScore,
+        predictedAwayScore: p.predictedAwayScore,
         actualHomeScore: actHome,
         actualAwayScore: actAway,
         isExactMatch: isExact,
