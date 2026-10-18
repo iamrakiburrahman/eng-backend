@@ -105,36 +105,45 @@ const getShowcaseSponsorshipsForClientFromDB = async (
     ).catch(() => {});
   }
 
-  // Group by Tier for structured mobile/web rendering
-  const byTier: Record<string, any[]> = {};
-  const byType: Record<string, any[]> = {
-    sponsor: [],
-    partner: [],
-    brand_collaboration: [],
-  };
-
-  for (const s of sponsors) {
-    // Group by Tier
-    const tier = s.tier || 'official';
-    if (!byTier[tier]) {
-      byTier[tier] = [];
-    }
-    byTier[tier].push(s);
-
-    // Group by Type
-    const type = s.type || 'sponsor';
-    if (!byType[type]) {
-      byType[type] = [];
-    }
-    byType[type].push(s);
-  }
-
-  return {
+  // Format response: default to clean flat list. Include groupings only if requested via ?groupBy=tier|type|all
+  const result: Record<string, any> = {
     total: sponsors.length,
     sponsors,
-    byTier,
-    byType,
   };
+
+  const groupBy = query.groupBy ? String(query.groupBy).toLowerCase() : null;
+
+  if (groupBy) {
+    if (groupBy === 'tier' || groupBy === 'all' || groupBy === 'both') {
+      const byTier: Record<string, any[]> = {};
+      for (const s of sponsors) {
+        const tier = s.tier || 'official';
+        if (!byTier[tier]) {
+          byTier[tier] = [];
+        }
+        byTier[tier].push(s);
+      }
+      result.byTier = byTier;
+    }
+
+    if (groupBy === 'type' || groupBy === 'all' || groupBy === 'both') {
+      const byType: Record<string, any[]> = {
+        sponsor: [],
+        partner: [],
+        brand_collaboration: [],
+      };
+      for (const s of sponsors) {
+        const type = s.type || 'sponsor';
+        if (!byType[type]) {
+          byType[type] = [];
+        }
+        byType[type].push(s);
+      }
+      result.byType = byType;
+    }
+  }
+
+  return result;
 };
 
 const getSingleSponsorshipFromDB = async (

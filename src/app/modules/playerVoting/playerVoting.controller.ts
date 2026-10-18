@@ -6,7 +6,7 @@ import { PlayerVotingService } from './playerVoting.service';
 
 const createVotingPoll = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as any;
-  const files = req.files as { image?: Express.Multer.File[] };
+  const files = req.files as { image?: Express.Multer.File[]; banner?: Express.Multer.File[] };
 
   let bodyData: any = {};
   if (req.body?.data) {
@@ -19,8 +19,10 @@ const createVotingPoll = catchAsync(async (req: Request, res: Response) => {
     bodyData = req.body;
   }
 
-  // Handle uploaded banner image if present
-  if (files?.image && files.image.length > 0 && files.image[0]) {
+  // Handle uploaded banner image if present (supports both 'banner' and 'image' field)
+  if (files?.banner && files.banner.length > 0 && files.banner[0]) {
+    bodyData.banner = `/images/${files.banner[0].filename}`;
+  } else if (files?.image && files.image.length > 0 && files.image[0]) {
     bodyData.banner = `/images/${files.image[0].filename}`;
   }
 
@@ -118,7 +120,7 @@ const castVote = catchAsync(async (req: Request, res: Response) => {
 
 const updateVotingPoll = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const files = req.files as { image?: Express.Multer.File[] };
+  const files = req.files as { image?: Express.Multer.File[]; banner?: Express.Multer.File[] };
 
   let bodyData: any = {};
   if (req.body?.data) {
@@ -131,7 +133,10 @@ const updateVotingPoll = catchAsync(async (req: Request, res: Response) => {
     bodyData = req.body;
   }
 
-  if (files?.image && files.image.length > 0 && files.image[0]) {
+  // Handle uploaded banner image if present (supports both 'banner' and 'image' field)
+  if (files?.banner && files.banner.length > 0 && files.banner[0]) {
+    bodyData.banner = `/images/${files.banner[0].filename}`;
+  } else if (files?.image && files.image.length > 0 && files.image[0]) {
     bodyData.banner = `/images/${files.image[0].filename}`;
   }
 
