@@ -48,6 +48,7 @@ import { ServerHealthRoutes } from "../modules/serverHealth/serverHealth.route";
 import { TeamCoinTransactionRoutes } from "../modules/teamCoinTransaction/teamCoinTransaction.route";
 import { SponsorshipRoutes } from "../modules/sponsorship/sponsorship.route";
 import { PlayerVotingRoutes } from "../modules/playerVoting/playerVoting.route";
+import { QuizRoutes } from "../modules/quiz/quiz.route";
 
 const router = express.Router();
 
@@ -105,6 +106,8 @@ const apiRoutes = [
     { path: "/sponsors", route: SponsorshipRoutes },
     { path: "/player-voting", route: PlayerVotingRoutes },
     { path: "/statistic/voting", route: PlayerVotingRoutes },
+    { path: "/quiz", route: QuizRoutes },
+    { path: "/quizzes", route: QuizRoutes },
 ]
 
 apiRoutes.forEach(route => router.use(route.path, route.route));
