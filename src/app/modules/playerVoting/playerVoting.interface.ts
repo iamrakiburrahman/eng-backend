@@ -5,6 +5,7 @@ export type TVotingType = 'WEEK' | 'MONTH';
 export type TVotingStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
 export interface INominee {
+  _id?: Types.ObjectId;
   player: Types.ObjectId;
   team?: Types.ObjectId;
   statsHighlight?: string; // e.g. "5 Goals, 2 Assists in 3 matches"

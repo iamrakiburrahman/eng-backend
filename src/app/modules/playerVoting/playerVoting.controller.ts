@@ -45,8 +45,37 @@ const createVotingPoll = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getTargetProfileId = (req: Request): string | undefined => {
+  const profileId =
+    (Array.isArray(req.body?.profileIds) ? req.body.profileIds[0] : req.body?.profileId) ||
+    req.body?.childId ||
+    req.body?.voterId ||
+    (Array.isArray(req.query?.profileId) ? req.query.profileId[0] : req.query?.profileId) ||
+    req.query?.childId ||
+    req.query?.voterId ||
+    (req.headers['x-profile-id'] as string) ||
+    (req.headers['x-child-id'] as string) ||
+    (req.headers['x-voter-id'] as string) ||
+    undefined;
+
+  return typeof profileId === 'string' ? profileId : undefined;
+};
+
+const getTargetVoterProfiles = (req: Request): string | string[] | undefined => {
+  if (Array.isArray(req.body?.profileIds) && req.body.profileIds.length > 0) {
+    return req.body.profileIds;
+  }
+  return getTargetProfileId(req);
+};
+
 const getAllVotingPolls = catchAsync(async (req: Request, res: Response) => {
-  const result = await PlayerVotingService.getAllVotingPollsFromDB(req.query);
+  const currentUserId = (req.user as any)?.id || (req.user as any)?._id;
+  const voterProfileId = getTargetProfileId(req);
+  const result = await PlayerVotingService.getAllVotingPollsFromDB(
+    req.query,
+    currentUserId,
+    voterProfileId
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -59,9 +88,14 @@ const getAllVotingPolls = catchAsync(async (req: Request, res: Response) => {
 
 const getSingleVotingPoll = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const currentUserId = (req.user as any)?.id;
+  const currentUserId = (req.user as any)?.id || (req.user as any)?._id;
+  const voterProfileId = getTargetProfileId(req);
 
-  const result = await PlayerVotingService.getSingleVotingPollFromDB(id, currentUserId);
+  const result = await PlayerVotingService.getSingleVotingPollFromDB(
+    id,
+    currentUserId,
+    voterProfileId
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -72,10 +106,13 @@ const getSingleVotingPoll = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getActiveVotingPolls = catchAsync(async (req: Request, res: Response) => {
-  const currentUserId = (req.user as any)?.id;
+  const currentUserId = (req.user as any)?.id || (req.user as any)?._id;
+  const voterProfileId = getTargetProfileId(req);
+
   const result = await PlayerVotingService.getActiveVotingPollsForClientFromDB(
     req.query,
-    currentUserId
+    currentUserId,
+    voterProfileId
   );
 
   sendResponse(res, {
@@ -91,6 +128,7 @@ const castVote = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as any;
   const targetId =
     req.body.playerId || req.body.nomineeId || req.body.id || req.body.candidateId;
+  const voterProfileId = getTargetVoterProfiles(req);
 
   if (!targetId) {
     return sendResponse(res, {
@@ -108,6 +146,7 @@ const castVote = catchAsync(async (req: Request, res: Response) => {
     id,
     user.id,
     targetId,
+    voterProfileId,
     ipAddress
   );
 
@@ -187,12 +226,37 @@ const toggleVotingStatus = catchAsync(async (req: Request, res: Response) => {
 
 const getVotingLeaderboard = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const result = await PlayerVotingService.getVotingLeaderboardOrResultsFromDB(id);
+  const currentUserId = (req.user as any)?.id || (req.user as any)?._id;
+  const voterProfileId = getTargetProfileId(req);
+  const result = await PlayerVotingService.getVotingLeaderboardOrResultsFromDB(
+    id,
+    currentUserId,
+    voterProfileId
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
     message: 'Voting poll results retrieved successfully',
+    data: result,
+  });
+});
+
+const checkMyVoteInPoll = catchAsync(async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const currentUserId = (req.user as any)?.id || (req.user as any)?._id;
+  const voterProfileId = getTargetProfileId(req);
+
+  const result = await PlayerVotingService.checkUserVoteStatusInDB(
+    id,
+    currentUserId,
+    voterProfileId
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: 'User vote status retrieved successfully',
     data: result,
   });
 });
@@ -210,7 +274,8 @@ const getPastWinners = catchAsync(async (req: Request, res: Response) => {
 
 const getMyVotes = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as any;
-  const result = await PlayerVotingService.getMyVotesFromDB(user.id);
+  const voterProfileId = getTargetProfileId(req);
+  const result = await PlayerVotingService.getMyVotesFromDB(user.id, voterProfileId);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -230,6 +295,7 @@ export const PlayerVotingController = {
   deleteVotingPoll,
   toggleVotingStatus,
   getVotingLeaderboard,
+  checkMyVoteInPoll,
   getPastWinners,
   getMyVotes,
 };

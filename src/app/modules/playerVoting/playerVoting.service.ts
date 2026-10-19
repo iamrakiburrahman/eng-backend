@@ -5,6 +5,122 @@ import { IPlayerVoting, TVotingStatus, TVotingType } from './playerVoting.interf
 import { PlayerVote, PlayerVoting } from './playerVoting.model';
 import { User } from '../user/user.model';
 import { League } from '../league/league.model';
+import { recordCoinTransaction } from '../../../helpers/coinLedgerHelper';
+import { COIN_TRANSACTION_CATEGORY } from '../coinTransaction/coinTransaction.interface';
+import { PlayerEconomy } from '../coinAndBudget/playerEconomySchema.model';
+
+// Helper to resolve effective voter (Main Account or Child Player Profile)
+const resolveEffectiveVoter = async (
+  userId: string,
+  requestedProfileId?: string
+): Promise<{ effectiveVoterId: string; effectiveVoterUser: any }> => {
+  if (!requestedProfileId || requestedProfileId.toString() === userId.toString()) {
+    const user = await User.findById(userId).select('_id firstName lastName userName role parentId').lean();
+    return { effectiveVoterId: userId.toString(), effectiveVoterUser: user };
+  }
+
+  // Check if requestedProfileId is a child of userId (Parent voting as child player)
+  const child = await User.findOne({
+    _id: requestedProfileId,
+    parentId: userId,
+  })
+    .select('_id firstName lastName userName role parentId')
+    .lean();
+
+  if (child) {
+    return { effectiveVoterId: child._id.toString(), effectiveVoterUser: child };
+  }
+
+  // Check if userId is a child and requestedProfileId is their parent or sibling
+  const user = await User.findById(userId).select('_id parentId').lean();
+  if (user?.parentId) {
+    // If requesting parent
+    if (user.parentId.toString() === requestedProfileId.toString()) {
+      const parent = await User.findById(requestedProfileId)
+        .select('_id firstName lastName userName role parentId')
+        .lean();
+      return { effectiveVoterId: requestedProfileId.toString(), effectiveVoterUser: parent };
+    }
+
+    // If requesting sibling child profile under same parent
+    const sibling = await User.findOne({
+      _id: requestedProfileId,
+      parentId: user.parentId,
+    })
+      .select('_id firstName lastName userName role parentId')
+      .lean();
+
+    if (sibling) {
+      return { effectiveVoterId: sibling._id.toString(), effectiveVoterUser: sibling };
+    }
+  }
+
+  throw new ApiError(
+    StatusCodes.FORBIDDEN,
+    'The selected player profile does not belong to your account.'
+  );
+};
+
+// Helper to get all family profiles (Main Account + all child players) with vote statuses
+const getFamilyProfilesWithVoteStatus = async (
+  userId: string,
+  votingId: string | Types.ObjectId,
+  effectiveVoterId: string
+) => {
+  const user = await User.findById(userId).select('_id firstName lastName userName role parentId').lean();
+  if (!user) return [];
+
+  const mainAccountId = user.parentId ? user.parentId.toString() : user._id.toString();
+  const mainAccount = user.parentId
+    ? await User.findById(user.parentId).select('_id firstName lastName userName role').lean()
+    : user;
+
+  const children = await User.find({ parentId: mainAccountId })
+    .select('_id firstName lastName userName role')
+    .lean();
+
+  const allFamilyIds = [
+    new Types.ObjectId(mainAccountId),
+    ...children.map((c) => c._id),
+  ];
+
+  const familyVotes = await PlayerVote.find({
+    votingId,
+    userId: { $in: allFamilyIds },
+  }).lean();
+
+  const familyVotesMap = new Map<string, string>();
+  familyVotes.forEach((v) => {
+    familyVotesMap.set(v.userId.toString(), v.playerId.toString());
+  });
+
+  const profilesList = [
+    {
+      id: mainAccountId,
+      name: `${mainAccount?.firstName || ''} ${mainAccount?.lastName || ''}`.trim() || mainAccount?.userName || 'Main Account',
+      type: 'MAIN_ACCOUNT',
+      isCurrent: effectiveVoterId === mainAccountId,
+      hasVoted: familyVotesMap.has(mainAccountId),
+      isVoted: familyVotesMap.has(mainAccountId),
+      votedPlayerId: familyVotesMap.get(mainAccountId) || null,
+    },
+    ...children.map((child) => {
+      const cId = child._id.toString();
+      const cHasVoted = familyVotesMap.has(cId);
+      return {
+        id: cId,
+        name: `${child.firstName || ''} ${child.lastName || ''}`.trim() || child.userName || 'Player',
+        type: 'PLAYER',
+        isCurrent: effectiveVoterId === cId,
+        hasVoted: cHasVoted,
+        isVoted: cHasVoted,
+        votedPlayerId: familyVotesMap.get(cId) || null,
+      };
+    }),
+  ];
+
+  return profilesList;
+};
 
 // Helper to auto-sync statuses based on current date/time
 const autoSyncPollStatus = async (poll: any) => {
@@ -25,10 +141,29 @@ const autoSyncPollStatus = async (poll: any) => {
     }
     const updateData: Record<string, any> = { status: 'completed' };
     if (winnerId && maxVotes > 0) {
-      updateData.winner = winnerId;
+      const resolvedWinnerId = (winnerId?._id ? winnerId._id : winnerId).toString();
+      updateData.winner = resolvedWinnerId;
       updateData.winnerVotes = maxVotes;
-      poll.winner = winnerId;
+      poll.winner = resolvedWinnerId;
       poll.winnerVotes = maxVotes;
+
+      // Award points / coins to specific winning player
+      try {
+        const pe = await PlayerEconomy.findOne().lean();
+        const potdCoin = Number(pe?.playerOfTheDay?.coin) || 5000;
+        const rewardAmount = poll.votingType === 'MONTH' ? potdCoin * 2 : potdCoin;
+
+        await recordCoinTransaction({
+          userId: resolvedWinnerId,
+          amount: rewardAmount,
+          category: COIN_TRANSACTION_CATEGORY.TOURNAMENT_PRIZE,
+          title: `${poll.votingType === 'MONTH' ? 'Player of the Month' : 'Player of the Week'} Winner Prize`,
+          description: `Reward for winning ${poll.title}`,
+          referenceId: `${poll._id.toString()}_winner`,
+        });
+      } catch (err) {
+        console.error('Error awarding winner coins during auto-sync:', err);
+      }
     }
     await PlayerVoting.findByIdAndUpdate(poll._id, updateData);
   }
@@ -126,9 +261,11 @@ const createVotingPollToDB = async (
 };
 
 const getAllVotingPollsFromDB = async (
-  query: Record<string, unknown>
+  query: Record<string, unknown>,
+  currentUserId?: string,
+  voterProfileId?: string
 ): Promise<{
-  data: IPlayerVoting[];
+  data: any[];
   pagination: { total: number; page: number; limit: number; totalPage: number };
 }> => {
   const page = Number(query.pageNumber) || Number(query.page) || 1;
@@ -161,7 +298,7 @@ const getAllVotingPollsFromDB = async (
   const [polls, total] = await Promise.all([
     PlayerVoting.find(filter)
       .populate('league', 'leagueName season ageGroup')
-      .populate('nominees.player', 'firstName lastName profile userName position')
+      .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
       .populate('nominees.team', 'teamName logo')
       .populate('winner', 'firstName lastName profile userName')
       .populate('createdBy', 'firstName lastName email')
@@ -179,8 +316,91 @@ const getAllVotingPollsFromDB = async (
     }
   });
 
+  // Resolve effective voter if user is logged in
+  let effectiveVoterId = currentUserId;
+  let effectiveVoter: any = null;
+  if (currentUserId) {
+    try {
+      const resolved = await resolveEffectiveVoter(currentUserId, voterProfileId);
+      effectiveVoterId = resolved.effectiveVoterId;
+      effectiveVoter = {
+        id: effectiveVoterId,
+        name: `${resolved.effectiveVoterUser?.firstName || ''} ${resolved.effectiveVoterUser?.lastName || ''}`.trim() || resolved.effectiveVoterUser?.userName || 'Voter',
+        type: resolved.effectiveVoterUser?.parentId ? 'PLAYER' : 'MAIN_ACCOUNT',
+      };
+    } catch {
+      effectiveVoterId = currentUserId;
+    }
+  }
+
+  // Check user votes if logged in
+  let userVotesMap = new Map<string, { playerId: string; votedAt: Date }>();
+  if (effectiveVoterId && polls.length > 0) {
+    const userObjId = Types.ObjectId.isValid(effectiveVoterId)
+      ? new Types.ObjectId(effectiveVoterId)
+      : effectiveVoterId;
+    const pollIds = polls.map((p) => p._id);
+    const votes = await PlayerVote.find({
+      votingId: { $in: pollIds },
+      userId: userObjId,
+    }).lean();
+
+    votes.forEach((v: any) => {
+      userVotesMap.set(v.votingId.toString(), {
+        playerId: v.playerId.toString(),
+        votedAt: v.createdAt,
+      });
+    });
+  }
+
+  const enrichedPolls = polls.map((poll) => {
+    const totalVotes = poll.totalVotes || 0;
+    const voteInfo = userVotesMap.get(poll._id.toString());
+    const hasVoted = Boolean(voteInfo);
+    const userVotedPlayerId = voteInfo?.playerId || null;
+    const votedAt = voteInfo?.votedAt || null;
+
+    let votedNomineeId: string | null = null;
+    if (userVotedPlayerId) {
+      const matched = (poll.nominees || []).find((n: any) => {
+        const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+        return pId === userVotedPlayerId;
+      });
+      votedNomineeId = matched?._id ? matched._id.toString() : null;
+    }
+
+    const nomineesWithStats = (poll.nominees || []).map((nom: any) => {
+      const percentage = totalVotes > 0 ? Number(((nom.votesCount / totalVotes) * 100).toFixed(1)) : 0;
+      const isChoice = Boolean(
+        userVotedPlayerId && (
+          (nom.player?._id && nom.player._id.toString() === userVotedPlayerId) ||
+          (nom.player && nom.player.toString() === userVotedPlayerId)
+        )
+      );
+      return {
+        ...nom,
+        votePercentage: percentage,
+        isUserChoice: isChoice,
+        isVoted: isChoice,
+        hasVoted: isChoice,
+      };
+    });
+
+    return {
+      ...poll,
+      nominees: nomineesWithStats,
+      hasVoted,
+      isVoted: hasVoted,
+      userVotedPlayerId,
+      votedPlayerId: userVotedPlayerId,
+      votedNomineeId,
+      votedAt,
+      currentProfile: effectiveVoter,
+    };
+  });
+
   return {
-    data: polls as IPlayerVoting[],
+    data: enrichedPolls,
     pagination: {
       total,
       page,
@@ -192,11 +412,12 @@ const getAllVotingPollsFromDB = async (
 
 const getSingleVotingPollFromDB = async (
   id: string,
-  currentUserId?: string
+  currentUserId?: string,
+  voterProfileId?: string
 ): Promise<any> => {
   const poll = await PlayerVoting.findById(id)
     .populate('league', 'leagueName season ageGroup')
-    .populate('nominees.player', 'firstName lastName profile userName position')
+    .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
     .populate('nominees.team', 'teamName logo')
     .populate('winner', 'firstName lastName profile userName')
     .populate('createdBy', 'firstName lastName email')
@@ -208,43 +429,87 @@ const getSingleVotingPollFromDB = async (
 
   await autoSyncPollStatus(poll);
 
-  // Calculate vote percentages
   const totalVotes = poll.totalVotes || 0;
-  const nomineesWithStats = (poll.nominees || []).map((nom: any) => {
-    const percentage = totalVotes > 0 ? Number(((nom.votesCount / totalVotes) * 100).toFixed(1)) : 0;
-    return {
-      ...nom,
-      votePercentage: percentage,
-    };
-  });
 
-  // Check if current user has voted in this poll
+  // Check if current user / profile has voted in this poll
   let hasVoted = false;
   let userVotedPlayerId: string | null = null;
+  let votedNomineeId: string | null = null;
+  let votedAt: Date | null = null;
+  let effectiveVoter: any = null;
+  let profiles: any[] = [];
 
   if (currentUserId) {
+    const { effectiveVoterId, effectiveVoterUser } = await resolveEffectiveVoter(
+      currentUserId,
+      voterProfileId
+    );
+
+    effectiveVoter = {
+      id: effectiveVoterId,
+      name: `${effectiveVoterUser?.firstName || ''} ${effectiveVoterUser?.lastName || ''}`.trim() || effectiveVoterUser?.userName || 'Voter',
+      type: effectiveVoterUser?.parentId ? 'PLAYER' : 'MAIN_ACCOUNT',
+    };
+
+    const userObjId = Types.ObjectId.isValid(effectiveVoterId)
+      ? new Types.ObjectId(effectiveVoterId)
+      : effectiveVoterId;
+
     const voteRecord = await PlayerVote.findOne({
       votingId: poll._id,
-      userId: currentUserId,
+      userId: userObjId,
     }).lean();
 
     if (voteRecord) {
       hasVoted = true;
       userVotedPlayerId = voteRecord.playerId?.toString() || null;
+      votedAt = (voteRecord as any).createdAt || null;
+
+      const matchedNom = (poll.nominees || []).find((n: any) => {
+        const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+        return pId === userVotedPlayerId;
+      });
+      votedNomineeId = matchedNom?._id ? matchedNom._id.toString() : null;
     }
+
+    profiles = await getFamilyProfilesWithVoteStatus(currentUserId, poll._id, effectiveVoterId);
   }
+
+  const nomineesWithStats = (poll.nominees || []).map((nom: any) => {
+    const percentage = totalVotes > 0 ? Number(((nom.votesCount / totalVotes) * 100).toFixed(1)) : 0;
+    const isChoice = Boolean(
+      userVotedPlayerId && (
+        (nom.player?._id && nom.player._id.toString() === userVotedPlayerId) ||
+        (nom.player && nom.player.toString() === userVotedPlayerId)
+      )
+    );
+    return {
+      ...nom,
+      votePercentage: percentage,
+      isUserChoice: isChoice,
+      isVoted: isChoice,
+      hasVoted: isChoice,
+    };
+  });
 
   return {
     ...poll,
     nominees: nomineesWithStats,
     hasVoted,
+    isVoted: hasVoted,
     userVotedPlayerId,
+    votedPlayerId: userVotedPlayerId,
+    votedNomineeId,
+    votedAt,
+    currentProfile: effectiveVoter,
+    profiles,
   };
 };
 
 const getActiveVotingPollsForClientFromDB = async (
   query: Record<string, unknown>,
-  currentUserId?: string
+  currentUserId?: string,
+  voterProfileId?: string
 ): Promise<any[]> => {
   const now = new Date();
 
@@ -268,37 +533,85 @@ const getActiveVotingPollsForClientFromDB = async (
 
   const polls = await PlayerVoting.find(filter)
     .populate('league', 'leagueName season ageGroup')
-    .populate('nominees.player', 'firstName lastName profile userName position')
+    .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
     .populate('nominees.team', 'teamName logo')
     .sort({ isFeatured: -1, startDate: 1 })
     .lean();
 
-  // Check user votes in batch if logged in
-  let userVotesMap = new Map<string, string>();
-  if (currentUserId && polls.length > 0) {
+  let effectiveVoterId = currentUserId;
+  let effectiveVoter: any = null;
+  let familyProfiles: any[] = [];
+
+  if (currentUserId) {
+    try {
+      const resolved = await resolveEffectiveVoter(currentUserId, voterProfileId);
+      effectiveVoterId = resolved.effectiveVoterId;
+      effectiveVoter = {
+        id: effectiveVoterId,
+        name: `${resolved.effectiveVoterUser?.firstName || ''} ${resolved.effectiveVoterUser?.lastName || ''}`.trim() || resolved.effectiveVoterUser?.userName || 'Voter',
+        type: resolved.effectiveVoterUser?.parentId ? 'PLAYER' : 'MAIN_ACCOUNT',
+      };
+    } catch {
+      effectiveVoterId = currentUserId;
+    }
+  }
+
+  // Check user votes in batch for effective voter
+  let userVotesMap = new Map<string, { playerId: string; votedAt: Date }>();
+  if (effectiveVoterId && polls.length > 0) {
+    const userObjId = Types.ObjectId.isValid(effectiveVoterId)
+      ? new Types.ObjectId(effectiveVoterId)
+      : effectiveVoterId;
     const pollIds = polls.map((p) => p._id);
     const votes = await PlayerVote.find({
       votingId: { $in: pollIds },
-      userId: currentUserId,
+      userId: userObjId,
     }).lean();
 
-    votes.forEach((v) => {
-      userVotesMap.set(v.votingId.toString(), v.playerId.toString());
+    votes.forEach((v: any) => {
+      userVotesMap.set(v.votingId.toString(), {
+        playerId: v.playerId.toString(),
+        votedAt: v.createdAt,
+      });
     });
+  }
+
+  // Get family profiles status
+  if (currentUserId && polls.length > 0) {
+    familyProfiles = await getFamilyProfilesWithVoteStatus(currentUserId, polls[0]._id, effectiveVoterId || currentUserId);
   }
 
   // Format with percentages and user vote status
   const formattedPolls = polls.map((poll) => {
     const totalVotes = poll.totalVotes || 0;
-    const hasVoted = userVotesMap.has(poll._id.toString());
-    const userVotedPlayerId = userVotesMap.get(poll._id.toString()) || null;
+    const voteInfo = userVotesMap.get(poll._id.toString());
+    const hasVoted = Boolean(voteInfo);
+    const userVotedPlayerId = voteInfo?.playerId || null;
+    const votedAt = voteInfo?.votedAt || null;
+
+    let votedNomineeId: string | null = null;
+    if (userVotedPlayerId) {
+      const matched = (poll.nominees || []).find((n: any) => {
+        const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+        return pId === userVotedPlayerId;
+      });
+      votedNomineeId = matched?._id ? matched._id.toString() : null;
+    }
 
     const nomineesWithStats = (poll.nominees || []).map((nom: any) => {
       const percentage = totalVotes > 0 ? Number(((nom.votesCount / totalVotes) * 100).toFixed(1)) : 0;
+      const isChoice = Boolean(
+        userVotedPlayerId && (
+          (nom.player?._id && nom.player._id.toString() === userVotedPlayerId) ||
+          (nom.player && nom.player.toString() === userVotedPlayerId)
+        )
+      );
       return {
         ...nom,
         votePercentage: percentage,
-        isUserChoice: userVotedPlayerId === nom.player?._id?.toString(),
+        isUserChoice: isChoice,
+        isVoted: isChoice,
+        hasVoted: isChoice,
       };
     });
 
@@ -306,7 +619,13 @@ const getActiveVotingPollsForClientFromDB = async (
       ...poll,
       nominees: nomineesWithStats,
       hasVoted,
+      isVoted: hasVoted,
       userVotedPlayerId,
+      votedPlayerId: userVotedPlayerId,
+      votedNomineeId,
+      votedAt,
+      currentProfile: effectiveVoter,
+      profiles: familyProfiles,
     };
   });
 
@@ -317,6 +636,7 @@ const castVoteInDB = async (
   votingId: string,
   userId: string,
   playerId: string,
+  voterProfileId?: string | string[],
   ipAddress?: string
 ): Promise<any> => {
   const poll = await PlayerVoting.findById(votingId);
@@ -364,36 +684,70 @@ const castVoteInDB = async (
     : targetNominee.player.toString();
   const nomineeDocId = (targetNominee as any)._id?.toString();
 
-  // Check if user already voted (also guarded by unique compound index)
-  const existingVote = await PlayerVote.findOne({
-    votingId: poll._id,
-    userId,
-  });
+  const profileIdList: string[] = Array.isArray(voterProfileId)
+    ? voterProfileId
+    : [voterProfileId || userId];
 
-  if (existingVote) {
+  const successfulVotes: string[] = [];
+  let lastEffectiveVoterId = userId;
+  let lastEffectiveVoterUser: any = null;
+
+  for (const rawProfileId of profileIdList) {
+    const { effectiveVoterId, effectiveVoterUser } = await resolveEffectiveVoter(
+      userId,
+      rawProfileId
+    );
+    lastEffectiveVoterId = effectiveVoterId;
+    lastEffectiveVoterUser = effectiveVoterUser;
+
+    const voterName = `${effectiveVoterUser?.firstName || ''} ${effectiveVoterUser?.lastName || ''}`.trim() || effectiveVoterUser?.userName || 'This profile';
+
+    // Check if this specific profile already voted
+    const existingVote = await PlayerVote.findOne({
+      votingId: poll._id,
+      userId: effectiveVoterId,
+    });
+
+    if (existingVote) {
+      if (profileIdList.length === 1) {
+        throw new ApiError(
+          StatusCodes.CONFLICT,
+          `${voterName} has already cast a vote in this voting round.`
+        );
+      }
+      continue;
+    }
+
+    try {
+      await PlayerVote.create({
+        votingId: poll._id,
+        userId: new Types.ObjectId(effectiveVoterId),
+        playerId: new Types.ObjectId(resolvedPlayerId),
+        ipAddress,
+      });
+      successfulVotes.push(effectiveVoterId);
+    } catch (err: any) {
+      if (err.code === 11000) {
+        if (profileIdList.length === 1) {
+          throw new ApiError(
+            StatusCodes.CONFLICT,
+            `${voterName} has already cast a vote in this voting round.`
+          );
+        }
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  if (successfulVotes.length === 0 && profileIdList.length > 1) {
     throw new ApiError(
       StatusCodes.CONFLICT,
-      'You have already cast your vote in this voting round.'
+      'All selected profiles have already cast their votes in this voting round.'
     );
   }
 
-  // Create vote record
-  try {
-    await PlayerVote.create({
-      votingId: poll._id,
-      userId: new Types.ObjectId(userId),
-      playerId: new Types.ObjectId(resolvedPlayerId),
-      ipAddress,
-    });
-  } catch (err: any) {
-    if (err.code === 11000) {
-      throw new ApiError(
-        StatusCodes.CONFLICT,
-        'You have already cast your vote in this voting round.'
-      );
-    }
-    throw err;
-  }
+  const voteIncrement = successfulVotes.length || 1;
 
   // Increment nominee vote count and total votes atomically
   const queryFilter: any = { _id: poll._id };
@@ -407,29 +761,47 @@ const castVoteInDB = async (
     queryFilter,
     {
       $inc: {
-        'nominees.$.votesCount': 1,
-        totalVotes: 1,
+        'nominees.$.votesCount': voteIncrement,
+        totalVotes: voteIncrement,
       },
     },
     { new: true }
   )
     .populate('league', 'leagueName season ageGroup')
-    .populate('nominees.player', 'firstName lastName profile userName position')
+    .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
     .populate('nominees.team', 'teamName logo')
     .lean();
 
   const totalVotes = updatedPoll?.totalVotes || 1;
-  const nomineesWithStats = (updatedPoll?.nominees || []).map((nom: any) => ({
-    ...nom,
-    votePercentage: Number(((nom.votesCount / totalVotes) * 100).toFixed(1)),
-    isUserChoice: nom.player?._id?.toString() === resolvedPlayerId,
-  }));
+  const nomineesWithStats = (updatedPoll?.nominees || []).map((nom: any) => {
+    const isChoice = nom.player?._id?.toString() === resolvedPlayerId;
+    return {
+      ...nom,
+      votePercentage: Number(((nom.votesCount / totalVotes) * 100).toFixed(1)),
+      isUserChoice: isChoice,
+      isVoted: isChoice,
+      hasVoted: isChoice,
+    };
+  });
+
+  // Fetch updated family profiles status
+  const profiles = await getFamilyProfilesWithVoteStatus(userId, poll._id, lastEffectiveVoterId);
 
   return {
     ...updatedPoll,
     nominees: nomineesWithStats,
     hasVoted: true,
+    isVoted: true,
     userVotedPlayerId: resolvedPlayerId,
+    votedPlayerId: resolvedPlayerId,
+    votedNomineeId: nomineeDocId || null,
+    votesCastCount: successfulVotes.length,
+    voterProfile: {
+      id: lastEffectiveVoterId,
+      name: `${lastEffectiveVoterUser?.firstName || ''} ${lastEffectiveVoterUser?.lastName || ''}`.trim() || 'Profile',
+      type: lastEffectiveVoterUser?.parentId ? 'PLAYER' : 'MAIN_ACCOUNT',
+    },
+    profiles,
   };
 };
 
@@ -516,8 +888,27 @@ const toggleVotingStatusInDB = async (
     }
 
     if (winnerPlayerId && maxVotes > 0) {
-      updateData.winner = winnerPlayerId;
+      const resolvedWinnerId = (winnerPlayerId?._id ? winnerPlayerId._id : winnerPlayerId).toString();
+      updateData.winner = resolvedWinnerId;
       updateData.winnerVotes = maxVotes;
+
+      // Award points / coins to specific winning player
+      try {
+        const pe = await PlayerEconomy.findOne().lean();
+        const potdCoin = Number(pe?.playerOfTheDay?.coin) || 5000;
+        const rewardAmount = poll.votingType === 'MONTH' ? potdCoin * 2 : potdCoin;
+
+        await recordCoinTransaction({
+          userId: resolvedWinnerId,
+          amount: rewardAmount,
+          category: COIN_TRANSACTION_CATEGORY.TOURNAMENT_PRIZE,
+          title: `${poll.votingType === 'MONTH' ? 'Player of the Month' : 'Player of the Week'} Winner Prize`,
+          description: `Reward for winning ${poll.title}`,
+          referenceId: `${poll._id.toString()}_winner`,
+        });
+      } catch (err) {
+        console.error('Error awarding winner coins in toggleVotingStatusInDB:', err);
+      }
     }
   }
 
@@ -525,14 +916,18 @@ const toggleVotingStatusInDB = async (
     new: true,
   })
     .populate('league', 'leagueName season ageGroup')
-    .populate('nominees.player', 'firstName lastName profile userName position')
+    .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
     .populate('nominees.team', 'teamName logo')
     .populate('winner', 'firstName lastName profile userName');
 
   return result;
 };
 
-const getVotingLeaderboardOrResultsFromDB = async (id: string): Promise<any> => {
+const getVotingLeaderboardOrResultsFromDB = async (
+  id: string,
+  currentUserId?: string,
+  voterProfileId?: string
+): Promise<any> => {
   const poll = await PlayerVoting.findById(id)
     .populate('league', 'leagueName season ageGroup')
     .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
@@ -546,22 +941,168 @@ const getVotingLeaderboardOrResultsFromDB = async (id: string): Promise<any> => 
 
   const totalVotes = poll.totalVotes || 0;
 
+  // Check if current user / profile voted
+  let hasVoted = false;
+  let userVotedPlayerId: string | null = null;
+  let votedNomineeId: string | null = null;
+  let effectiveVoter: any = null;
+  let profiles: any[] = [];
+
+  if (currentUserId) {
+    try {
+      const { effectiveVoterId, effectiveVoterUser } = await resolveEffectiveVoter(
+        currentUserId,
+        voterProfileId
+      );
+
+      effectiveVoter = {
+        id: effectiveVoterId,
+        name: `${effectiveVoterUser?.firstName || ''} ${effectiveVoterUser?.lastName || ''}`.trim() || effectiveVoterUser?.userName || 'Voter',
+        type: effectiveVoterUser?.parentId ? 'PLAYER' : 'MAIN_ACCOUNT',
+      };
+
+      const userObjId = Types.ObjectId.isValid(effectiveVoterId)
+        ? new Types.ObjectId(effectiveVoterId)
+        : effectiveVoterId;
+
+      const voteRecord = await PlayerVote.findOne({
+        votingId: poll._id,
+        userId: userObjId,
+      }).lean();
+
+      if (voteRecord) {
+        hasVoted = true;
+        userVotedPlayerId = voteRecord.playerId?.toString() || null;
+        const matched = (poll.nominees || []).find((n: any) => {
+          const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+          return pId === userVotedPlayerId;
+        });
+        votedNomineeId = matched?._id ? matched._id.toString() : null;
+      }
+
+      profiles = await getFamilyProfilesWithVoteStatus(currentUserId, poll._id, effectiveVoterId);
+    } catch {
+      // Ignore resolution error for public results
+    }
+  }
+
   // Rank nominees by votesCount descending
   const rankedNominees = [...(poll.nominees || [])]
     .sort((a, b) => b.votesCount - a.votesCount)
     .map((nom: any, index: number) => {
       const percentage = totalVotes > 0 ? Number(((nom.votesCount / totalVotes) * 100).toFixed(1)) : 0;
+      const isChoice = Boolean(
+        userVotedPlayerId && (
+          (nom.player?._id && nom.player._id.toString() === userVotedPlayerId) ||
+          (nom.player && nom.player.toString() === userVotedPlayerId)
+        )
+      );
       return {
         rank: index + 1,
         ...nom,
         votePercentage: percentage,
         isLeading: index === 0 && nom.votesCount > 0,
+        isUserChoice: isChoice,
+        isVoted: isChoice,
+        hasVoted: isChoice,
       };
     });
 
   return {
     ...poll,
     nominees: rankedNominees,
+    hasVoted,
+    isVoted: hasVoted,
+    userVotedPlayerId,
+    votedPlayerId: userVotedPlayerId,
+    votedNomineeId,
+    currentProfile: effectiveVoter,
+    profiles,
+  };
+};
+
+const checkUserVoteStatusInDB = async (
+  votingId: string,
+  userId?: string,
+  voterProfileId?: string
+): Promise<any> => {
+  if (!userId) {
+    return {
+      hasVoted: false,
+      isVoted: false,
+      votedPlayerId: null,
+      userVotedPlayerId: null,
+      votedNomineeId: null,
+      votedAt: null,
+      voteRecord: null,
+      currentProfile: null,
+      profiles: [],
+    };
+  }
+
+  const { effectiveVoterId, effectiveVoterUser } = await resolveEffectiveVoter(
+    userId,
+    voterProfileId
+  );
+
+  const voterName = `${effectiveVoterUser?.firstName || ''} ${effectiveVoterUser?.lastName || ''}`.trim() || effectiveVoterUser?.userName || 'Voter';
+
+  const userObjId = Types.ObjectId.isValid(effectiveVoterId)
+    ? new Types.ObjectId(effectiveVoterId)
+    : effectiveVoterId;
+
+  const voteRecord = await PlayerVote.findOne({
+    votingId,
+    userId: userObjId,
+  })
+    .populate('playerId', 'firstName lastName profile userName position selectTeam')
+    .lean();
+
+  const profiles = await getFamilyProfilesWithVoteStatus(userId, votingId, effectiveVoterId);
+
+  if (!voteRecord) {
+    return {
+      hasVoted: false,
+      isVoted: false,
+      votedPlayerId: null,
+      userVotedPlayerId: null,
+      votedNomineeId: null,
+      votedAt: null,
+      voteRecord: null,
+      currentProfile: {
+        id: effectiveVoterId,
+        name: voterName,
+        type: effectiveVoterUser?.parentId ? 'PLAYER' : 'MAIN_ACCOUNT',
+      },
+      profiles,
+    };
+  }
+
+  const targetPlayerId = voteRecord.playerId?._id
+    ? voteRecord.playerId._id.toString()
+    : voteRecord.playerId?.toString();
+
+  const poll = await PlayerVoting.findById(votingId).select('nominees').lean();
+  const matchedNom = (poll?.nominees || []).find((n: any) => {
+    const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+    return pId === targetPlayerId;
+  });
+
+  return {
+    hasVoted: true,
+    isVoted: true,
+    votedPlayerId: targetPlayerId,
+    userVotedPlayerId: targetPlayerId,
+    votedNomineeId: matchedNom?._id ? matchedNom._id.toString() : null,
+    votedPlayer: voteRecord.playerId,
+    votedAt: (voteRecord as any).createdAt,
+    voteRecord,
+    currentProfile: {
+      id: effectiveVoterId,
+      name: voterName,
+      type: effectiveVoterUser?.parentId ? 'PLAYER' : 'MAIN_ACCOUNT',
+    },
+    profiles,
   };
 };
 
@@ -593,7 +1134,7 @@ const getPastWinnersFromDB = async (
   }
 
   const winners = await PlayerVoting.find(filter)
-    .populate('winner', 'firstName lastName profile userName position')
+    .populate('winner', 'firstName lastName profile userName position selectTeam')
     .populate('league', 'leagueName season ageGroup')
     .sort({ endDate: -1, createdAt: -1 })
     .lean();
@@ -604,8 +1145,24 @@ const getPastWinnersFromDB = async (
   };
 };
 
-const getMyVotesFromDB = async (userId: string): Promise<any[]> => {
-  const votes = await PlayerVote.find({ userId })
+const getMyVotesFromDB = async (userId: string, voterProfileId?: string): Promise<any[]> => {
+  let targetUserIds: Types.ObjectId[] = [];
+
+  if (voterProfileId) {
+    const { effectiveVoterId } = await resolveEffectiveVoter(userId, voterProfileId);
+    targetUserIds = [new Types.ObjectId(effectiveVoterId)];
+  } else {
+    // If no specific profile specified, fetch votes for the entire family
+    const user = await User.findById(userId).select('_id parentId').lean();
+    const mainAccountId = user?.parentId ? user.parentId.toString() : userId.toString();
+    const children = await User.find({ parentId: mainAccountId }).select('_id').lean();
+    targetUserIds = [
+      new Types.ObjectId(mainAccountId),
+      ...children.map((c) => c._id),
+    ];
+  }
+
+  const votes = await PlayerVote.find({ userId: { $in: targetUserIds } })
     .populate({
       path: 'votingId',
       populate: [
@@ -613,7 +1170,8 @@ const getMyVotesFromDB = async (userId: string): Promise<any[]> => {
         { path: 'winner', select: 'firstName lastName profile userName' },
       ],
     })
-    .populate('playerId', 'firstName lastName profile userName position')
+    .populate('userId', 'firstName lastName profile userName')
+    .populate('playerId', 'firstName lastName profile userName position selectTeam')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -630,6 +1188,7 @@ export const PlayerVotingService = {
   deleteVotingPollInDB,
   toggleVotingStatusInDB,
   getVotingLeaderboardOrResultsFromDB,
+  checkUserVoteStatusInDB,
   getPastWinnersFromDB,
   getMyVotesFromDB,
 };
