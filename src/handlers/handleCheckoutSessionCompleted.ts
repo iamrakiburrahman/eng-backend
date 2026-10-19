@@ -7,6 +7,8 @@ import { Subscription } from '../app/modules/subscription/subscription.model';
 import { NOTIFICATION_TYPE } from '../app/modules/notification/notification.interface';
 import { NotificationQueueHelper } from '../helpers/bullMQ/bullHelper';
 import { USER_ROLES } from '../enums/user';
+import { recordCoinTransaction } from '../helpers/coinLedgerHelper';
+import { COIN_TRANSACTION_CATEGORY } from '../app/modules/coinTransaction/coinTransaction.interface';
 
 export const handleCheckoutSessionCompleted = async (session: any) => {
   const userId = (session.client_reference_id || session.metadata?.userId) as string | null;
@@ -132,15 +134,27 @@ export const handleCheckoutSessionCompleted = async (session: any) => {
     updateData.blueTick = true;
   }
 
-  const incData: any = {
-    engCoine: creditToAdd,
-    marketValue: marketValueToAdd,
-  };
-
   await User.findByIdAndUpdate(targetUser._id, {
     $set: updateData,
-    $inc: incData,
   });
+
+  if (creditToAdd > 0) {
+    try {
+      await recordCoinTransaction({
+        userId: targetUser._id,
+        amount: creditToAdd,
+        category: COIN_TRANSACTION_CATEGORY.SUBSCRIPTION_BONUS,
+        title: "Subscription Bonus",
+        description: `Credited ${creditToAdd.toLocaleString()} ENG Coins from "${pkg.title}" package`,
+        referenceId: subscriptionId,
+      });
+    } catch (coinErr) {
+      console.error("Error recording subscription coin transaction:", coinErr);
+      await User.findByIdAndUpdate(targetUser._id, {
+        $inc: { engCoine: creditToAdd, marketValue: marketValueToAdd },
+      });
+    }
+  }
 
   // Ensure Parent account also has active access
   if (user._id.toString() !== targetUser._id.toString()) {
@@ -154,7 +168,7 @@ export const handleCheckoutSessionCompleted = async (session: any) => {
     await NotificationQueueHelper.sendNotification(
       user._id.toString(),
       `Your subscription for package "${pkg.title}" is now active. Enjoy all premium features!`,
-      'Subscription Activated! 🚀',
+      'Subscription Activated!',
       NOTIFICATION_TYPE.SUBSCRIPTION_ACTIVATED
     );
   } catch (notifErr) {
