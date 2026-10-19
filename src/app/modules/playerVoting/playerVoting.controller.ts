@@ -89,13 +89,14 @@ const getActiveVotingPolls = catchAsync(async (req: Request, res: Response) => {
 const castVote = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const user = req.user as any;
-  const { playerId } = req.body;
+  const targetId =
+    req.body.playerId || req.body.nomineeId || req.body.id || req.body.candidateId;
 
-  if (!playerId) {
+  if (!targetId) {
     return sendResponse(res, {
       statusCode: StatusCodes.BAD_REQUEST,
       success: false,
-      message: 'playerId is required to cast a vote.',
+      message: 'playerId or nomineeId is required to cast a vote.',
       data: null,
     });
   }
@@ -106,7 +107,7 @@ const castVote = catchAsync(async (req: Request, res: Response) => {
   const result = await PlayerVotingService.castVoteInDB(
     id,
     user.id,
-    playerId,
+    targetId,
     ipAddress
   );
 

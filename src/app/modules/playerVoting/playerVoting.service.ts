@@ -344,16 +344,25 @@ const castVoteInDB = async (
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Voting period has expired.');
   }
 
-  // Check if target player is one of the nominees
-  const nomineeIndex = poll.nominees.findIndex(
-    (n) => n.player.toString() === playerId
-  );
+  // Check if target matches either player ID or nominee subdocument _id
+  const nomineeIndex = poll.nominees.findIndex((n: any) => {
+    const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+    const subId = n._id ? n._id.toString() : '';
+    return pId === playerId || subId === playerId;
+  });
+
   if (nomineeIndex === -1) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
-      'The selected player is not a nominee in this voting round.'
+      'The selected player or nominee is not a nominee in this voting round.'
     );
   }
+
+  const targetNominee = poll.nominees[nomineeIndex];
+  const resolvedPlayerId = targetNominee.player?._id
+    ? targetNominee.player._id.toString()
+    : targetNominee.player.toString();
+  const nomineeDocId = (targetNominee as any)._id?.toString();
 
   // Check if user already voted (also guarded by unique compound index)
   const existingVote = await PlayerVote.findOne({
@@ -373,7 +382,7 @@ const castVoteInDB = async (
     await PlayerVote.create({
       votingId: poll._id,
       userId: new Types.ObjectId(userId),
-      playerId: new Types.ObjectId(playerId),
+      playerId: new Types.ObjectId(resolvedPlayerId),
       ipAddress,
     });
   } catch (err: any) {
@@ -387,8 +396,15 @@ const castVoteInDB = async (
   }
 
   // Increment nominee vote count and total votes atomically
+  const queryFilter: any = { _id: poll._id };
+  if (nomineeDocId) {
+    queryFilter['nominees._id'] = new Types.ObjectId(nomineeDocId);
+  } else {
+    queryFilter['nominees.player'] = new Types.ObjectId(resolvedPlayerId);
+  }
+
   const updatedPoll = await PlayerVoting.findOneAndUpdate(
-    { _id: poll._id, 'nominees.player': playerId },
+    queryFilter,
     {
       $inc: {
         'nominees.$.votesCount': 1,
@@ -406,14 +422,14 @@ const castVoteInDB = async (
   const nomineesWithStats = (updatedPoll?.nominees || []).map((nom: any) => ({
     ...nom,
     votePercentage: Number(((nom.votesCount / totalVotes) * 100).toFixed(1)),
-    isUserChoice: nom.player?._id?.toString() === playerId,
+    isUserChoice: nom.player?._id?.toString() === resolvedPlayerId,
   }));
 
   return {
     ...updatedPoll,
     nominees: nomineesWithStats,
     hasVoted: true,
-    userVotedPlayerId: playerId,
+    userVotedPlayerId: resolvedPlayerId,
   };
 };
 
