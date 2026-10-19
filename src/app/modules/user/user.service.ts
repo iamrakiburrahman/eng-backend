@@ -14,7 +14,7 @@ import { NOTIFICATION_TYPE } from "../notification/notification.interface";
 import { PlayerEconomy } from "../coinAndBudget/playerEconomySchema.model";
 import { ManagerTeam } from "../managerTeam/managerTeam.model";
 import { getPlayerStatsSummary } from "../../../helpers/playerStatsHelper";
-import { isUserPremiumPlayer } from "../../../helpers/packageHelper";
+import { isPremiumPlayerPackage, isUserPremiumPlayer } from "../../../helpers/packageHelper";
 import { recordCoinTransaction } from "../../../helpers/coinLedgerHelper";
 import { COIN_TRANSACTION_CATEGORY } from "../coinTransaction/coinTransaction.interface";
 import { carryForwardPlayerStats } from "../../../helpers/playerTransferStatsHelper";
@@ -151,13 +151,17 @@ const getUserProfileFromDB = async (user: JwtPayload) => {
   // user details are merged into user
   const userDetails = isExistUser;
 
-  // active subscription
+  // active subscription (always latest active)
   const subscription = await Subscription.findOne({
     user: id,
     status: "active",
-  }).populate("package");
+  })
+    .sort({ createdAt: -1 })
+    .populate("package");
 
   const isDetailsSubmitted = checkIsProfileCompleted(isExistUser);
+  const pkg: any = subscription?.package;
+  const isPremium = await isPremiumPlayerPackage(pkg);
 
   return {
     _id: isExistUser._id,
@@ -174,6 +178,13 @@ const getUserProfileFromDB = async (user: JwtPayload) => {
     phone: isExistUser.phone || null,
     status: userDetails?.status || "PENDING",
     permissions: isExistUser.permissions || [],
+
+    // Coin & Market Value: Only visible if user has an active Professional/Premium plan
+    engCoine: isPremium ? (isExistUser.engCoine || 0) : null,
+    marketValue: isPremium ? (isExistUser.marketValue || 0) : null,
+    isPremium,
+    isSubscribed: Boolean(subscription || isExistUser.isSubscribed),
+    hasAccess: Boolean(subscription || isExistUser.hasAccess),
 
     // ✅ Screen 2 profile details completion status
     isDetailsSubmitted,
@@ -402,6 +413,7 @@ const getPlayerByUserId = async (userId: string) => {
       user: userId,
       status: "active",
     })
+      .sort({ createdAt: -1 })
       .populate("package")
       .lean(),
     getPlayerStatsSummary(userId),
@@ -412,6 +424,8 @@ const getPlayerByUserId = async (userId: string) => {
   }
 
   const isDetailsSubmitted = checkIsProfileCompleted(result);
+  const pkg: any = activeSub?.package;
+  const isPremium = await isPremiumPlayerPackage(pkg);
 
   return {
     ...result,
@@ -419,6 +433,12 @@ const getPlayerByUserId = async (userId: string) => {
     jerseyNumber: result.jerseyNumber || null,
     activeSubscription: activeSub || null,
     activePackage: activeSub?.package || null,
+    isPremium,
+    isSubscribed: Boolean(activeSub || result.isSubscribed),
+    hasAccess: Boolean(activeSub || result.hasAccess),
+    isPaid: Boolean(activeSub || result.isSubscribed || result.hasAccess),
+    engCoine: isPremium ? (result.engCoine || 0) : null,
+    marketValue: isPremium ? (result.marketValue || 0) : null,
 
     stats: {
       goals: stats.goals,
@@ -508,6 +528,7 @@ const getPlayerDetailsByUserId = async (userId: string) => {
       user: userId,
       status: "active",
     })
+      .sort({ createdAt: -1 })
       .populate("package")
       .lean(),
     getPlayerStatsSummary(userId),
@@ -518,6 +539,8 @@ const getPlayerDetailsByUserId = async (userId: string) => {
   }
 
   const teamData: any = result.selectTeam;
+  const pkg: any = activeSub?.package;
+  const isPremium = await isPremiumPlayerPackage(pkg);
 
   return {
     ...result,
@@ -527,6 +550,12 @@ const getPlayerDetailsByUserId = async (userId: string) => {
     teamDetails: teamData || null,
     activeSubscription: activeSub || null,
     activePackage: activeSub?.package || null,
+    isPremium,
+    isSubscribed: Boolean(activeSub || result.isSubscribed),
+    hasAccess: Boolean(activeSub || result.hasAccess),
+    isPaid: Boolean(activeSub || result.isSubscribed || result.hasAccess),
+    engCoine: isPremium ? (result.engCoine || 0) : null,
+    marketValue: isPremium ? (result.marketValue || 0) : null,
     stats: {
       goals: stats.goals,
       assists: stats.assists,

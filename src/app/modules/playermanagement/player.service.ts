@@ -24,7 +24,9 @@ const checkCanViewOtherPlayers = async (
   const subscription = await Subscription.findOne({
     user: userId,
     status: "active",
-  }).populate("package");
+  })
+    .sort({ createdAt: -1 })
+    .populate("package");
 
   if (subscription && subscription.package) {
     const pkg = subscription.package as any;
@@ -369,7 +371,9 @@ const approvePlayerByAdminToDB = async (playerId: string) => {
   const activeSub = await Subscription.findOne({
     user: player._id,
     status: "active",
-  }).populate("package");
+  })
+    .sort({ createdAt: -1 })
+    .populate("package");
 
   const playerObj = updatedPlayer?.toObject
     ? updatedPlayer.toObject()

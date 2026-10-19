@@ -36,9 +36,12 @@ export const handleCheckoutSessionCompleted = async (session: any) => {
   // 2. Check if this exact subscription ID already exists in DB
   const alreadyExists = await Subscription.findOne({ subscriptionId });
   if (alreadyExists) {
-    // If it's already active in DB, ensure user has access
-    if (alreadyExists.status === 'active' && (!(user as any).isSubscribed || !(user as any).hasAccess)) {
-      await User.findByIdAndUpdate(user._id, { isSubscribed: true, hasAccess: true });
+    if (alreadyExists.status === 'active') {
+      await User.findByIdAndUpdate(alreadyExists.user, { isSubscribed: true, hasAccess: true });
+      await Subscription.updateMany(
+        { user: alreadyExists.user, status: 'active', _id: { $ne: alreadyExists._id } },
+        { status: 'cancel' }
+      );
     }
     return alreadyExists;
   }

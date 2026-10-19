@@ -109,7 +109,15 @@ const getCheckoutUrl = catchAsync(async (req: Request, res: Response) => {
         throw new ApiError(StatusCodes.BAD_REQUEST, 'User email is required');
     }
 
-    const playerId = (req.query.playerId || req.body?.playerId) as string | undefined;
+    const playerId = (
+        req.query.playerId ||
+        req.query.childId ||
+        req.query.profileId ||
+        req.body?.playerId ||
+        req.body?.childId ||
+        req.body?.profileId ||
+        (req.headers['x-player-id'] as string)
+    ) as string | undefined;
     const result = await PackageService.getCheckoutUrlFromDB(
         req.params.id as string,
         user._id.toString(),

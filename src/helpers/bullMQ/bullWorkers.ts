@@ -332,23 +332,31 @@ export const cleanupWorker = new Worker<CleanupJobData>(
 
                     case 'subscription-sync':
                          const now = new Date();
+                         // Only check subscriptions marked 'expired' (NEVER revive explicitly cancelled ones)
                          const mistakenlyExpired = await Subscription.find({
-                              status: { $in: ['expired', 'cancel'] },
+                              status: 'expired',
                          }).populate('user');
 
                          let restoredCount = 0;
                          for (const sub of mistakenlyExpired) {
-                              if (sub.currentPeriodEnd) {
+                              if (sub.currentPeriodEnd && sub.user) {
+                                   const targetUserId = (sub.user as any)._id || sub.user;
+                                   // Do not restore if user already has an active subscription
+                                   const hasActiveSub = await Subscription.findOne({
+                                        user: targetUserId,
+                                        status: 'active',
+                                        _id: { $ne: sub._id },
+                                   });
+                                   if (hasActiveSub) continue;
+
                                    const endDate = new Date(sub.currentPeriodEnd);
                                    if (!isNaN(endDate.getTime()) && now < endDate) {
                                         sub.status = 'active';
                                         await sub.save();
-                                        if (sub.user) {
-                                             await User.findByIdAndUpdate((sub.user as any)._id || sub.user, {
-                                                  isSubscribed: true,
-                                                  hasAccess: true,
-                                             });
-                                        }
+                                        await User.findByIdAndUpdate(targetUserId, {
+                                             isSubscribed: true,
+                                             hasAccess: true,
+                                        });
                                         restoredCount++;
                                    }
                               }

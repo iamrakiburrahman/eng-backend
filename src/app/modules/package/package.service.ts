@@ -346,19 +346,42 @@ const getCheckoutUrlFromDB = async (packageId: string, userId: string, userEmail
         throw new ApiError(StatusCodes.BAD_REQUEST, 'User email is required');
     }
 
+    const pkg = await Package.findById(packageId);
+    if (!pkg) {
+        throw new ApiError(StatusCodes.NOT_FOUND, 'Package not found');
+    }
+
+    if (!pkg.stripePriceId) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, 'Package does not have a Stripe Price ID');
+    }
+
+    const authUser = await User.findById(userId);
+    if (!authUser) {
+        throw new ApiError(StatusCodes.NOT_FOUND, 'User not found');
+    }
+
     let targetUserId = playerId || userId;
 
-    // Check if user is a parent with child players. Subscription belongs to child player!
+    // In this system, parent accounts hold the app login (role: PLAYER) and create child players linked via parentId
     const childPlayers = await User.find({ parentId: userId });
-    if (childPlayers && childPlayers.length > 0) {
-        if (playerId) {
-            const validChild = childPlayers.find(c => c._id.toString() === playerId.toString());
-            if (validChild) {
-                targetUserId = validChild._id.toString();
-            }
-        } else if (childPlayers.length === 1) {
-            targetUserId = childPlayers[0]._id.toString();
+    const isParentAccount = childPlayers.length > 0;
+    const cleanUserType = (pkg.userType || '').trim().toUpperCase().replace(/[\s_-]+/g, '_');
+    const isPlayerPackage = ['PLAYER', 'TOURNAMENT_PLAYER', 'TRIAL_PLAYER', 'OTHER_CLUBS'].includes(cleanUserType);
+
+    // Strict validation: Child player ID is REQUIRED when subscribing from a parent account that has child players
+    if (isPlayerPackage && isParentAccount) {
+        if (!playerId) {
+            throw new ApiError(StatusCodes.BAD_REQUEST, 'Child player ID (playerId / childId) is required to generate subscription link');
         }
+        if (!mongoose.Types.ObjectId.isValid(playerId)) {
+            throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid child player ID');
+        }
+        const validChild = childPlayers.find(c => c._id.toString() === playerId.toString()) ||
+                           await User.findOne({ _id: playerId, parentId: userId });
+        if (!validChild) {
+            throw new ApiError(StatusCodes.BAD_REQUEST, 'Specified child player profile does not belong to this parent account');
+        }
+        targetUserId = validChild._id.toString();
     } else if (playerId) {
         if (!mongoose.Types.ObjectId.isValid(playerId)) {
             throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
@@ -368,16 +391,6 @@ const getCheckoutUrlFromDB = async (packageId: string, userId: string, userEmail
             throw new ApiError(StatusCodes.NOT_FOUND, 'Player profile not found');
         }
         targetUserId = player._id.toString();
-    }
-
-    const pkg = await Package.findById(packageId);
-
-    if (!pkg) {
-        throw new ApiError(StatusCodes.NOT_FOUND, 'Package not found');
-    }
-
-    if (!pkg.stripePriceId) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, 'Package does not have a Stripe Price ID');
     }
 
     // Generate dynamic checkout session using stripe.checkout.sessions.create

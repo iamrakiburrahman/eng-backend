@@ -26,6 +26,10 @@ export const handleSubscriptionCreated = async (data: any) => {
   if (alreadyExists) {
     if (alreadyExists.status === "active") {
       await User.findByIdAndUpdate(alreadyExists.user, { isSubscribed: true, hasAccess: true });
+      await Subscription.updateMany(
+        { user: alreadyExists.user, status: "active", _id: { $ne: alreadyExists._id } },
+        { status: "cancel" }
+      );
     }
     return alreadyExists;
   }
