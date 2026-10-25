@@ -41,6 +41,7 @@ export interface IPlayerVote {
   votingId: Types.ObjectId;
   userId: Types.ObjectId;
   playerId: Types.ObjectId;
+  nomineeId?: Types.ObjectId;
   ipAddress?: string;
   createdAt?: Date;
 }

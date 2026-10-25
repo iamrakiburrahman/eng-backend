@@ -41,6 +41,7 @@ export interface IRefereeVote {
   votingId: Types.ObjectId;
   userId: Types.ObjectId;
   refereeId: Types.ObjectId;
+  nomineeId?: Types.ObjectId;
   ipAddress?: string;
   createdAt?: Date;
 }

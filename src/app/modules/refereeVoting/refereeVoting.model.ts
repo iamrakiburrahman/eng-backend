@@ -158,6 +158,10 @@ const RefereeVoteSchema = new Schema<IRefereeVote, RefereeVoteModel>(
       ref: 'User',
       required: true,
     },
+    nomineeId: {
+      type: Schema.Types.ObjectId,
+      index: true,
+    },
     ipAddress: {
       type: String,
     },

@@ -157,6 +157,10 @@ const PlayerVoteSchema = new Schema<IPlayerVote, PlayerVoteModel>(
       ref: 'User',
       required: true,
     },
+    nomineeId: {
+      type: Schema.Types.ObjectId,
+      index: true,
+    },
     ipAddress: {
       type: String,
     },

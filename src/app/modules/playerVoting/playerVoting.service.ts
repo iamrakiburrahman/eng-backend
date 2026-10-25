@@ -65,7 +65,8 @@ const resolveEffectiveVoter = async (
 const getFamilyProfilesWithVoteStatus = async (
   userId: string,
   votingId: string | Types.ObjectId,
-  effectiveVoterId: string
+  effectiveVoterId: string,
+  pollNominees?: any[]
 ) => {
   const user = await User.findById(userId).select('_id firstName lastName userName role parentId').lean();
   if (!user) return [];
@@ -89,10 +90,36 @@ const getFamilyProfilesWithVoteStatus = async (
     userId: { $in: allFamilyIds },
   }).lean();
 
-  const familyVotesMap = new Map<string, string>();
-  familyVotes.forEach((v) => {
-    familyVotesMap.set(v.userId.toString(), v.playerId.toString());
+  let nomineesList = pollNominees;
+  if (!nomineesList) {
+    const pollDoc = await PlayerVoting.findById(votingId).select('nominees').lean();
+    nomineesList = pollDoc?.nominees || [];
+  }
+
+  const familyVotesMap = new Map<string, { playerId: string; nomineeId?: string }>();
+  familyVotes.forEach((v: any) => {
+    familyVotesMap.set(v.userId.toString(), {
+      playerId: v.playerId ? v.playerId.toString() : '',
+      nomineeId: v.nomineeId ? v.nomineeId.toString() : undefined,
+    });
   });
+
+  const resolveNomineeId = (voteInfo?: { playerId: string; nomineeId?: string }) => {
+    if (!voteInfo) return null;
+    if (voteInfo.nomineeId) return voteInfo.nomineeId;
+    if (nomineesList && Array.isArray(nomineesList)) {
+      const matched = nomineesList.find((n: any) => {
+        const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+        const subId = n._id ? n._id.toString() : '';
+        return (voteInfo.nomineeId && subId === voteInfo.nomineeId) || (pId && pId === voteInfo.playerId);
+      });
+      if (matched?._id) return matched._id.toString();
+    }
+    return null;
+  };
+
+  const mainVoteInfo = familyVotesMap.get(mainAccountId);
+  const mainHasVoted = Boolean(mainVoteInfo);
 
   const profilesList = [
     {
@@ -100,13 +127,15 @@ const getFamilyProfilesWithVoteStatus = async (
       name: `${mainAccount?.firstName || ''} ${mainAccount?.lastName || ''}`.trim() || mainAccount?.userName || 'Main Account',
       type: 'MAIN_ACCOUNT',
       isCurrent: effectiveVoterId === mainAccountId,
-      hasVoted: familyVotesMap.has(mainAccountId),
-      isVoted: familyVotesMap.has(mainAccountId),
-      votedPlayerId: familyVotesMap.get(mainAccountId) || null,
+      hasVoted: mainHasVoted,
+      isVoted: mainHasVoted,
+      votedNomineeId: resolveNomineeId(mainVoteInfo),
+      votedPlayerId: mainVoteInfo?.playerId || null,
     },
     ...children.map((child) => {
       const cId = child._id.toString();
-      const cHasVoted = familyVotesMap.has(cId);
+      const childVoteInfo = familyVotesMap.get(cId);
+      const cHasVoted = Boolean(childVoteInfo);
       return {
         id: cId,
         name: `${child.firstName || ''} ${child.lastName || ''}`.trim() || child.userName || 'Player',
@@ -114,7 +143,8 @@ const getFamilyProfilesWithVoteStatus = async (
         isCurrent: effectiveVoterId === cId,
         hasVoted: cHasVoted,
         isVoted: cHasVoted,
-        votedPlayerId: familyVotesMap.get(cId) || null,
+        votedNomineeId: resolveNomineeId(childVoteInfo),
+        votedPlayerId: childVoteInfo?.playerId || null,
       };
     }),
   ];
@@ -393,6 +423,7 @@ const getAllVotingPollsFromDB = async (
       isVoted: hasVoted,
       userVotedPlayerId,
       votedPlayerId: userVotedPlayerId,
+      userVotedNomineeId: votedNomineeId,
       votedNomineeId,
       votedAt,
       currentProfile: effectiveVoter,
@@ -472,7 +503,7 @@ const getSingleVotingPollFromDB = async (
       votedNomineeId = matchedNom?._id ? matchedNom._id.toString() : null;
     }
 
-    profiles = await getFamilyProfilesWithVoteStatus(currentUserId, poll._id, effectiveVoterId);
+    profiles = await getFamilyProfilesWithVoteStatus(currentUserId, poll._id, effectiveVoterId, poll.nominees);
   }
 
   const nomineesWithStats = (poll.nominees || []).map((nom: any) => {
@@ -499,6 +530,7 @@ const getSingleVotingPollFromDB = async (
     isVoted: hasVoted,
     userVotedPlayerId,
     votedPlayerId: userVotedPlayerId,
+    userVotedNomineeId: votedNomineeId,
     votedNomineeId,
     votedAt,
     currentProfile: effectiveVoter,
@@ -540,7 +572,6 @@ const getActiveVotingPollsForClientFromDB = async (
 
   let effectiveVoterId = currentUserId;
   let effectiveVoter: any = null;
-  let familyProfiles: any[] = [];
 
   if (currentUserId) {
     try {
@@ -556,46 +587,124 @@ const getActiveVotingPollsForClientFromDB = async (
     }
   }
 
-  // Check user votes in batch for effective voter
-  let userVotesMap = new Map<string, { playerId: string; votedAt: Date }>();
-  if (effectiveVoterId && polls.length > 0) {
-    const userObjId = Types.ObjectId.isValid(effectiveVoterId)
-      ? new Types.ObjectId(effectiveVoterId)
-      : effectiveVoterId;
-    const pollIds = polls.map((p) => p._id);
-    const votes = await PlayerVote.find({
-      votingId: { $in: pollIds },
-      userId: userObjId,
-    }).lean();
+  // Pre-fetch family profiles and all family votes across all active polls
+  let familyUserProfiles: Array<{
+    id: string;
+    name: string;
+    type: 'MAIN_ACCOUNT' | 'PLAYER';
+  }> = [];
 
-    votes.forEach((v: any) => {
-      userVotesMap.set(v.votingId.toString(), {
-        playerId: v.playerId.toString(),
-        votedAt: v.createdAt,
-      });
-    });
-  }
+  const familyVotesByPollAndUser = new Map<string, { playerId: string; nomineeId?: string; votedAt?: Date }>();
 
-  // Get family profiles status
   if (currentUserId && polls.length > 0) {
-    familyProfiles = await getFamilyProfilesWithVoteStatus(currentUserId, polls[0]._id, effectiveVoterId || currentUserId);
+    const user = await User.findById(currentUserId)
+      .select('_id firstName lastName userName role parentId')
+      .lean();
+
+    if (user) {
+      const mainAccountId = user.parentId ? user.parentId.toString() : user._id.toString();
+      const mainAccount = user.parentId
+        ? await User.findById(user.parentId).select('_id firstName lastName userName role').lean()
+        : user;
+
+      const children = await User.find({ parentId: mainAccountId })
+        .select('_id firstName lastName userName role')
+        .lean();
+
+      familyUserProfiles = [
+        {
+          id: mainAccountId,
+          name:
+            `${mainAccount?.firstName || ''} ${mainAccount?.lastName || ''}`.trim() ||
+            mainAccount?.userName ||
+            'Main Account',
+          type: 'MAIN_ACCOUNT',
+        },
+        ...children.map((child) => ({
+          id: child._id.toString(),
+          name:
+            `${child.firstName || ''} ${child.lastName || ''}`.trim() ||
+            child.userName ||
+            'Player',
+          type: 'PLAYER' as const,
+        })),
+      ];
+
+      const allFamilyObjectIds = [
+        new Types.ObjectId(mainAccountId),
+        ...children.map((c) => c._id),
+      ];
+
+      const pollIds = polls.map((p) => p._id);
+      const allFamilyVotes = await PlayerVote.find({
+        votingId: { $in: pollIds },
+        userId: { $in: allFamilyObjectIds },
+      }).lean();
+
+      allFamilyVotes.forEach((v: any) => {
+        const key = `${v.votingId.toString()}_${v.userId.toString()}`;
+        familyVotesByPollAndUser.set(key, {
+          playerId: v.playerId ? v.playerId.toString() : '',
+          nomineeId: v.nomineeId ? v.nomineeId.toString() : undefined,
+          votedAt: v.createdAt,
+        });
+      });
+    }
   }
 
-  // Format with percentages and user vote status
+  // Format with percentages and strictly per-poll user & profile vote status
   const formattedPolls = polls.map((poll) => {
+    const pollIdStr = poll._id.toString();
     const totalVotes = poll.totalVotes || 0;
-    const voteInfo = userVotesMap.get(poll._id.toString());
-    const hasVoted = Boolean(voteInfo);
-    const userVotedPlayerId = voteInfo?.playerId || null;
-    const votedAt = voteInfo?.votedAt || null;
 
-    let votedNomineeId: string | null = null;
-    if (userVotedPlayerId) {
+    // Build the strictly scoped profiles array for THIS poll
+    const pollProfiles = familyUserProfiles.map((prof) => {
+      const voteKey = `${pollIdStr}_${prof.id}`;
+      const voteInfo = familyVotesByPollAndUser.get(voteKey);
+      const hasVoted = Boolean(voteInfo);
+      let votedNomineeId: string | null = null;
+      let votedPlayerId: string | null = null;
+
+      if (voteInfo) {
+        votedPlayerId = voteInfo.playerId || null;
+        if (voteInfo.nomineeId) {
+          votedNomineeId = voteInfo.nomineeId;
+        } else if (votedPlayerId && poll.nominees) {
+          const matched = (poll.nominees || []).find((n: any) => {
+            const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
+            return pId === votedPlayerId;
+          });
+          votedNomineeId = matched?._id ? matched._id.toString() : null;
+        }
+      }
+
+      return {
+        id: prof.id,
+        name: prof.name,
+        type: prof.type,
+        hasVoted,
+        isVoted: hasVoted,
+        votedNomineeId,
+        votedPlayerId,
+        isCurrent: prof.id === effectiveVoterId,
+      };
+    });
+
+    // Determine poll-level flags for the active profile (or logged-in user) in THIS poll
+    const activeProfileVote = familyVotesByPollAndUser.get(`${pollIdStr}_${effectiveVoterId}`);
+    const hasVoted = Boolean(activeProfileVote);
+    const userVotedPlayerId = activeProfileVote?.playerId || null;
+    const votedAt = activeProfileVote?.votedAt || null;
+
+    let userVotedNomineeId: string | null = null;
+    if (activeProfileVote?.nomineeId) {
+      userVotedNomineeId = activeProfileVote.nomineeId;
+    } else if (userVotedPlayerId && poll.nominees) {
       const matched = (poll.nominees || []).find((n: any) => {
         const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
         return pId === userVotedPlayerId;
       });
-      votedNomineeId = matched?._id ? matched._id.toString() : null;
+      userVotedNomineeId = matched?._id ? matched._id.toString() : null;
     }
 
     const nomineesWithStats = (poll.nominees || []).map((nom: any) => {
@@ -622,10 +731,11 @@ const getActiveVotingPollsForClientFromDB = async (
       isVoted: hasVoted,
       userVotedPlayerId,
       votedPlayerId: userVotedPlayerId,
-      votedNomineeId,
+      userVotedNomineeId,
+      votedNomineeId: userVotedNomineeId,
       votedAt,
       currentProfile: effectiveVoter,
-      profiles: familyProfiles,
+      profiles: pollProfiles,
     };
   });
 
@@ -723,6 +833,7 @@ const castVoteInDB = async (
         votingId: poll._id,
         userId: new Types.ObjectId(effectiveVoterId),
         playerId: new Types.ObjectId(resolvedPlayerId),
+        nomineeId: nomineeDocId ? new Types.ObjectId(nomineeDocId) : undefined,
         ipAddress,
       });
       successfulVotes.push(effectiveVoterId);
@@ -785,7 +896,12 @@ const castVoteInDB = async (
   });
 
   // Fetch updated family profiles status
-  const profiles = await getFamilyProfilesWithVoteStatus(userId, poll._id, lastEffectiveVoterId);
+  const profiles = await getFamilyProfilesWithVoteStatus(
+    userId,
+    poll._id,
+    lastEffectiveVoterId,
+    updatedPoll?.nominees
+  );
 
   return {
     ...updatedPoll,
@@ -794,6 +910,7 @@ const castVoteInDB = async (
     isVoted: true,
     userVotedPlayerId: resolvedPlayerId,
     votedPlayerId: resolvedPlayerId,
+    userVotedNomineeId: nomineeDocId || null,
     votedNomineeId: nomineeDocId || null,
     votesCastCount: successfulVotes.length,
     voterProfile: {
@@ -980,7 +1097,7 @@ const getVotingLeaderboardOrResultsFromDB = async (
         votedNomineeId = matched?._id ? matched._id.toString() : null;
       }
 
-      profiles = await getFamilyProfilesWithVoteStatus(currentUserId, poll._id, effectiveVoterId);
+      profiles = await getFamilyProfilesWithVoteStatus(currentUserId, poll._id, effectiveVoterId, poll.nominees);
     } catch {
       // Ignore resolution error for public results
     }
@@ -1015,6 +1132,7 @@ const getVotingLeaderboardOrResultsFromDB = async (
     isVoted: hasVoted,
     userVotedPlayerId,
     votedPlayerId: userVotedPlayerId,
+    userVotedNomineeId: votedNomineeId,
     votedNomineeId,
     currentProfile: effectiveVoter,
     profiles,
@@ -1051,6 +1169,8 @@ const checkUserVoteStatusInDB = async (
     ? new Types.ObjectId(effectiveVoterId)
     : effectiveVoterId;
 
+  const poll = await PlayerVoting.findById(votingId).select('nominees').lean();
+
   const voteRecord = await PlayerVote.findOne({
     votingId,
     userId: userObjId,
@@ -1058,7 +1178,7 @@ const checkUserVoteStatusInDB = async (
     .populate('playerId', 'firstName lastName profile userName position selectTeam')
     .lean();
 
-  const profiles = await getFamilyProfilesWithVoteStatus(userId, votingId, effectiveVoterId);
+  const profiles = await getFamilyProfilesWithVoteStatus(userId, votingId, effectiveVoterId, poll?.nominees);
 
   if (!voteRecord) {
     return {
@@ -1066,6 +1186,7 @@ const checkUserVoteStatusInDB = async (
       isVoted: false,
       votedPlayerId: null,
       userVotedPlayerId: null,
+      userVotedNomineeId: null,
       votedNomineeId: null,
       votedAt: null,
       voteRecord: null,
@@ -1082,7 +1203,6 @@ const checkUserVoteStatusInDB = async (
     ? voteRecord.playerId._id.toString()
     : voteRecord.playerId?.toString();
 
-  const poll = await PlayerVoting.findById(votingId).select('nominees').lean();
   const matchedNom = (poll?.nominees || []).find((n: any) => {
     const pId = n.player?._id ? n.player._id.toString() : n.player?.toString();
     return pId === targetPlayerId;
@@ -1093,6 +1213,7 @@ const checkUserVoteStatusInDB = async (
     isVoted: true,
     votedPlayerId: targetPlayerId,
     userVotedPlayerId: targetPlayerId,
+    userVotedNomineeId: matchedNom?._id ? matchedNom._id.toString() : null,
     votedNomineeId: matchedNom?._id ? matchedNom._id.toString() : null,
     votedPlayer: voteRecord.playerId,
     votedAt: (voteRecord as any).createdAt,
