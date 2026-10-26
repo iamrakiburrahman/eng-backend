@@ -179,8 +179,12 @@ const getUserProfileFromDB = async (user: JwtPayload) => {
     status: userDetails?.status || "PENDING",
     permissions: isExistUser.permissions || [],
 
-    // Coin & Market Value: Only visible if user has an active Professional/Premium plan
-    engCoine: isPremium ? (isExistUser.engCoine || 0) : null,
+    // Coin, Reward Points & Wallet Balance
+    engCoine: isExistUser.engCoine || 0,
+    coins: isExistUser.engCoine || 0,
+    rewardPoint: isExistUser.rewardPoint || 0,
+    rewardPoints: isExistUser.rewardPoint || 0,
+    walletBalance: isExistUser.engCoine || 0,
     marketValue: isPremium ? (isExistUser.marketValue || 0) : null,
     isPremium,
     isSubscribed: Boolean(subscription || isExistUser.isSubscribed),
@@ -437,7 +441,11 @@ const getPlayerByUserId = async (userId: string) => {
     isSubscribed: Boolean(activeSub || result.isSubscribed),
     hasAccess: Boolean(activeSub || result.hasAccess),
     isPaid: Boolean(activeSub || result.isSubscribed || result.hasAccess),
-    engCoine: isPremium ? (result.engCoine || 0) : null,
+    engCoine: result.engCoine || 0,
+    coins: result.engCoine || 0,
+    rewardPoint: result.rewardPoint || 0,
+    rewardPoints: result.rewardPoint || 0,
+    walletBalance: result.engCoine || 0,
     marketValue: isPremium ? (result.marketValue || 0) : null,
 
     stats: {
@@ -554,7 +562,11 @@ const getPlayerDetailsByUserId = async (userId: string) => {
     isSubscribed: Boolean(activeSub || result.isSubscribed),
     hasAccess: Boolean(activeSub || result.hasAccess),
     isPaid: Boolean(activeSub || result.isSubscribed || result.hasAccess),
-    engCoine: isPremium ? (result.engCoine || 0) : null,
+    engCoine: result.engCoine || 0,
+    coins: result.engCoine || 0,
+    rewardPoint: result.rewardPoint || 0,
+    rewardPoints: result.rewardPoint || 0,
+    walletBalance: result.engCoine || 0,
     marketValue: isPremium ? (result.marketValue || 0) : null,
     stats: {
       goals: stats.goals,

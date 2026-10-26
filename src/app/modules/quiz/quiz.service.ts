@@ -4,6 +4,8 @@ import { IQuiz, IQuizAttempt } from './quiz.interface';
 import { Quiz, QuizAttempt } from './quiz.model';
 import { User } from '../user/user.model';
 import { Types } from 'mongoose';
+import { recordCoinTransaction } from '../../../helpers/coinLedgerHelper';
+import { COIN_TRANSACTION_CATEGORY } from '../coinTransaction/coinTransaction.interface';
 
 const parsePayload = (payload: any): any => {
   const data = { ...payload };
@@ -227,6 +229,19 @@ const submitQuizAttemptInDB = async (
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Quiz period has ended.');
   }
 
+  // Strictly enforce 1 attempt per quiz (whether passed or failed)
+  const existingAttempt = await QuizAttempt.findOne({
+    quiz: quizId,
+    user: userId,
+  });
+
+  if (existingAttempt) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'You have already attempted this quiz. Only 1 attempt is allowed.'
+    );
+  }
+
   // Evaluate answers
   const originalQuestions = quiz.questions || [];
   let earnedScore = 0;
@@ -263,42 +278,58 @@ const submitQuizAttemptInDB = async (
   const percentage = totalPossible > 0 ? Number(((earnedScore / totalPossible) * 100).toFixed(1)) : 0;
   const isPassed = percentage >= quiz.passingPercentage;
 
-  // Determine rewards (Award points if passed and user has NOT already passed this quiz previously)
+  // Determine rewards (Award points if passed on this attempt)
   let rewardToAward = 0;
   if (isPassed && quiz.rewardPoints > 0) {
-    const previousPassedAttempt = await QuizAttempt.findOne({
-      quiz: quizId,
-      user: userId,
-      isPassed: true,
+    rewardToAward = quiz.rewardPoints;
+    // Award reward points (recordCoinTransaction handles engCoine and coin ledger)
+    await User.findByIdAndUpdate(userId, {
+      $inc: { rewardPoint: rewardToAward },
     });
 
-    if (!previousPassedAttempt) {
-      rewardToAward = quiz.rewardPoints;
-      // Award to user account
-      await User.findByIdAndUpdate(userId, {
-        $inc: { rewardPoint: rewardToAward, engCoine: rewardToAward },
+    try {
+      await recordCoinTransaction({
+        userId,
+        amount: rewardToAward,
+        category: COIN_TRANSACTION_CATEGORY.QUIZ_REWARD,
+        title: `Quiz Passed: ${quiz.title}`,
+        description: `Earned ${rewardToAward} coins for scoring ${percentage}% on "${quiz.title}"`,
+        referenceId: `${quiz._id.toString()}_quiz_reward`,
       });
+    } catch (coinErr) {
+      console.error('Failed to record coin transaction for quiz:', coinErr);
     }
   }
 
   // Save attempt
-  const attempt = await QuizAttempt.create({
-    quiz: quizId,
-    user: userId,
-    score: earnedScore,
-    totalPossiblePoints: totalPossible,
-    percentage,
-    isPassed,
-    rewardEarned: rewardToAward,
-    answers: answersBreakdown.map((a) => ({
-      questionIndex: a.questionIndex,
-      selectedOptionIndex: a.selectedOptionIndex,
-      isCorrect: a.isCorrect,
-      pointsEarned: a.pointsEarned,
-    })),
-    timeTakenSeconds,
-    completedAt: now,
-  });
+  let attempt;
+  try {
+    attempt = await QuizAttempt.create({
+      quiz: quizId,
+      user: userId,
+      score: earnedScore,
+      totalPossiblePoints: totalPossible,
+      percentage,
+      isPassed,
+      rewardEarned: rewardToAward,
+      answers: answersBreakdown.map((a) => ({
+        questionIndex: a.questionIndex,
+        selectedOptionIndex: a.selectedOptionIndex,
+        isCorrect: a.isCorrect,
+        pointsEarned: a.pointsEarned,
+      })),
+      timeTakenSeconds,
+      completedAt: now,
+    });
+  } catch (err: any) {
+    if (err.code === 11000) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        'You have already attempted this quiz. Only 1 attempt is allowed.'
+      );
+    }
+    throw err;
+  }
 
   // Update quiz counters
   await Quiz.findByIdAndUpdate(quizId, {

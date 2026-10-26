@@ -7,8 +7,8 @@ import { QuizController } from './quiz.controller';
 const router = express.Router();
 
 // 1. PUBLIC & CLIENT ENDPOINTS
-// Get active quizzes (supports optional category & league filter)
-router.get('/active', QuizController.getActiveQuizzes);
+// Get active quizzes (supports optional category & league filter, evaluates user attempts if token provided)
+router.get('/active', auth(false), QuizController.getActiveQuizzes);
 
 // Get leaderboard of top scorers for a quiz
 router.get('/:id/leaderboard', QuizController.getQuizLeaderboard);

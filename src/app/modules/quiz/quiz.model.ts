@@ -187,7 +187,7 @@ const QuizAttemptSchema = new Schema<IQuizAttempt>(
   }
 );
 
-QuizAttemptSchema.index({ quiz: 1, user: 1 });
+QuizAttemptSchema.index({ quiz: 1, user: 1 }, { unique: true });
 QuizAttemptSchema.index({ quiz: 1, score: -1, timeTakenSeconds: 1 });
 
 export const Quiz = model<IQuiz>('Quiz', QuizSchema);
