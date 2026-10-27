@@ -18,13 +18,12 @@ const parseBodyData = (req: Request) => {
   return bodyData;
 };
 
-// 1. Create Promotional Post
+// 1. Create Promotional Ad
 const createPromotion = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as any;
   const files = req.files as {
     image?: Express.Multer.File[];
     banner?: Express.Multer.File[];
-    gallery?: Express.Multer.File[];
   };
 
   const bodyData = parseBodyData(req);
@@ -36,41 +35,15 @@ const createPromotion = catchAsync(async (req: Request, res: Response) => {
     bodyData.banner = `/images/${files.image[0].filename}`;
   }
 
-  // Handle gallery files if any
-  if (files?.gallery && files.gallery.length > 0) {
-    bodyData.gallery = files.gallery.map((f) => `/images/${f.filename}`);
-  }
-
-  // Ensure ageGroups is array
-  if (typeof bodyData.ageGroups === 'string') {
-    try {
-      bodyData.ageGroups = JSON.parse(bodyData.ageGroups);
-    } catch {
-      bodyData.ageGroups = [bodyData.ageGroups];
-    }
-  }
-
-  // Ensure sessionDetails or teamDetails or contactInfo are parsed if string
-  ['sessionDetails', 'teamDetails', 'contactInfo'].forEach((key) => {
-    if (typeof bodyData[key] === 'string') {
-      try {
-        bodyData[key] = JSON.parse(bodyData[key]);
-      } catch {
-        // keep as is
-      }
-    }
-  });
-
   const result = await PromotionalZoneService.createPromotionToDB(
     bodyData,
-    user?.id || user?._id,
-    user?.role || 'COACH'
+    user?.id || user?._id
   );
 
   sendResponse(res, {
     statusCode: StatusCodes.CREATED,
     success: true,
-    message: 'Promotional post created successfully',
+    message: 'Promotional ad created successfully',
     data: result,
   });
 });
@@ -85,7 +58,7 @@ const getAllPromotions = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Promotional posts retrieved successfully',
+    message: 'Promotional ads retrieved successfully',
     pagination: result.meta,
     data: result.data,
   });
@@ -98,7 +71,7 @@ const getAllPromotionsForAdmin = catchAsync(async (req: Request, res: Response) 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Admin promotional posts retrieved successfully',
+    message: 'Admin promotional ads retrieved successfully',
     pagination: result.meta,
     data: result.data,
   });
@@ -114,7 +87,7 @@ const getSinglePromotion = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Promotion retrieved successfully',
+    message: 'Promotional ad retrieved successfully',
     data: result,
   });
 });
@@ -122,7 +95,6 @@ const getSinglePromotion = catchAsync(async (req: Request, res: Response) => {
 // 5. Update Promotion
 const updatePromotion = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const user = req.user as any;
   const files = req.files as {
     image?: Express.Multer.File[];
     banner?: Express.Multer.File[];
@@ -136,27 +108,12 @@ const updatePromotion = catchAsync(async (req: Request, res: Response) => {
     bodyData.banner = `/images/${files.image[0].filename}`;
   }
 
-  ['ageGroups', 'sessionDetails', 'teamDetails', 'contactInfo'].forEach((key) => {
-    if (typeof bodyData[key] === 'string') {
-      try {
-        bodyData[key] = JSON.parse(bodyData[key]);
-      } catch {
-        // keep as is
-      }
-    }
-  });
-
-  const result = await PromotionalZoneService.updatePromotionInDB(
-    id,
-    bodyData,
-    user?.id || user?._id,
-    user?.role || ''
-  );
+  const result = await PromotionalZoneService.updatePromotionInDB(id, bodyData);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Promotion updated successfully',
+    message: 'Promotional ad updated successfully',
     data: result,
   });
 });
@@ -164,18 +121,13 @@ const updatePromotion = catchAsync(async (req: Request, res: Response) => {
 // 6. Delete Promotion
 const deletePromotion = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const user = req.user as any;
 
-  const result = await PromotionalZoneService.deletePromotionFromDB(
-    id,
-    user?.id || user?._id,
-    user?.role || ''
-  );
+  const result = await PromotionalZoneService.deletePromotionFromDB(id);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Promotion deleted successfully',
+    message: 'Promotional ad deleted successfully',
     data: result,
   });
 });
@@ -213,81 +165,15 @@ const toggleFeaturePromotion = catchAsync(async (req: Request, res: Response) =>
   });
 });
 
-// 9. Get My Created Promotions
-const getMyPromotions = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user as any;
-
-  const result = await PromotionalZoneService.getMyPromotionsFromDB(
-    user?.id || user?._id,
-    req.query
-  );
-
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: 'My promotions retrieved successfully',
-    pagination: result.meta,
-    data: result.data,
-  });
-});
-
-// 10. Submit Inquiry (Player / Parent)
-const submitInquiry = catchAsync(async (req: Request, res: Response) => {
+// 9. Track Ad Click (Mobile App or Web tap)
+const trackPromotionClick = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const user = req.user as any;
-
-  const result = await PromotionalZoneService.createInquiryToDB(
-    id,
-    req.body,
-    user?.id || user?._id
-  );
-
-  sendResponse(res, {
-    statusCode: StatusCodes.CREATED,
-    success: true,
-    message: 'Inquiry submitted successfully! The coach/team will contact you shortly.',
-    data: result,
-  });
-});
-
-// 11. Get Inquiries for a Promotion
-const getPromotionInquiries = catchAsync(async (req: Request, res: Response) => {
-  const id = req.params.id as string;
-  const user = req.user as any;
-
-  const result = await PromotionalZoneService.getInquiriesByPromotionIdFromDB(
-    id,
-    req.query,
-    user?.id || user?._id,
-    user?.role || ''
-  );
+  const result = await PromotionalZoneService.trackPromotionClickInDB(id);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: 'Inquiries retrieved successfully',
-    pagination: result.meta,
-    data: result.data,
-  });
-});
-
-// 12. Update Inquiry Status
-const updateInquiryStatus = catchAsync(async (req: Request, res: Response) => {
-  const inquiryId = req.params.inquiryId as string;
-  const { status } = req.body;
-  const user = req.user as any;
-
-  const result = await PromotionalZoneService.updateInquiryStatusInDB(
-    inquiryId,
-    status,
-    user?.id || user?._id,
-    user?.role || ''
-  );
-
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: `Inquiry status updated to ${status}`,
+    message: 'Promotion click recorded successfully',
     data: result,
   });
 });
@@ -301,8 +187,5 @@ export const PromotionalZoneController = {
   deletePromotion,
   updatePromotionStatus,
   toggleFeaturePromotion,
-  getMyPromotions,
-  submitInquiry,
-  getPromotionInquiries,
-  updateInquiryStatus,
+  trackPromotionClick,
 };

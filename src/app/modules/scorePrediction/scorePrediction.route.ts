@@ -8,7 +8,7 @@ const router = express.Router();
 
 // 1. PUBLIC & CLIENT ENDPOINTS
 // Get active prediction rounds in fixtures section
-router.get('/active', ScorePredictionController.getActivePredictionRounds);
+router.get('/active', auth(false), ScorePredictionController.getActivePredictionRounds);
 
 // Get leaderboard of predictors for a round
 router.get('/:id/leaderboard', ScorePredictionController.getRoundLeaderboard);
