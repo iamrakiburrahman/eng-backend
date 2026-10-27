@@ -7,6 +7,8 @@ import { User } from '../user/user.model';
 import { CoinTransaction } from '../coinTransaction/coinTransaction.model';
 import { COIN_TRANSACTION_CATEGORY } from '../coinTransaction/coinTransaction.interface';
 import { Types } from 'mongoose';
+import { recordCoinTransaction } from '../../../helpers/coinLedgerHelper';
+import { resolveEffectivePlayerForAction } from '../../../helpers/playerProfileResolver';
 
 const parseRoundPayload = (payload: any): any => {
   const data = { ...payload };
@@ -124,7 +126,8 @@ const getSinglePredictionRoundFromDB = async (id: string): Promise<any> => {
 
 const getActivePredictionRoundsForClientFromDB = async (
   query: Record<string, unknown>,
-  currentUserId?: string
+  currentUserId?: string,
+  requestedProfileId?: string
 ): Promise<any[]> => {
   const now = new Date();
 
@@ -133,8 +136,8 @@ const getActivePredictionRoundsForClientFromDB = async (
     status: { $in: ['active', 'locked'] },
   };
 
-  if (query.leagueId || query.league) {
-    filter.league = query.leagueId || query.league;
+  if ((query as any).leagueId || (query as any).league) {
+    filter.league = (query as any).leagueId || (query as any).league;
   }
 
   const rounds = await ScorePredictionRound.find(filter)
@@ -152,10 +155,20 @@ const getActivePredictionRoundsForClientFromDB = async (
 
   let userPredictionsMap = new Map<string, any>();
   if (currentUserId && rounds.length > 0) {
+    let effectivePlayerId = currentUserId;
+    try {
+      const resolved = await resolveEffectivePlayerForAction(currentUserId, requestedProfileId);
+      if (resolved?._id) {
+        effectivePlayerId = resolved._id.toString();
+      }
+    } catch {
+      // Fallback to currentUserId
+    }
+
     const roundIds = rounds.map((r) => r._id);
     const userPredictions = await UserScorePrediction.find({
       round: { $in: roundIds },
-      user: currentUserId,
+      user: effectivePlayerId,
     }).lean();
 
     userPredictions.forEach((up) => {
@@ -191,7 +204,7 @@ const getActivePredictionRoundsForClientFromDB = async (
 const submitUserPredictionInDB = async (
   roundId: string,
   userId: string,
-  submittedPredictions: { matchId: string; homeScore: number; awayScore: number }[]
+  submittedPredictions: any[]
 ): Promise<any> => {
   const round = await ScorePredictionRound.findById(roundId);
   if (!round) {
@@ -214,15 +227,28 @@ const submitUserPredictionInDB = async (
   const roundMatchIds = new Set(round.matches.map((m) => m.toString()));
 
   const formattedPredictions = submittedPredictions.map((sp) => {
-    if (!roundMatchIds.has(sp.matchId)) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, `Match ${sp.matchId} is not part of this round.`);
+    // Support both match and matchId (and _id / id)
+    const rawMatchId = sp.matchId || sp.match || sp.id || sp._id;
+    const matchIdStr = rawMatchId ? rawMatchId.toString() : '';
+
+    if (!matchIdStr || !roundMatchIds.has(matchIdStr)) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        `Match ${matchIdStr || 'unknown'} is not part of this round.`
+      );
     }
 
-    const homeScore = Math.max(0, parseInt(String(sp.homeScore), 10) || 0);
-    const awayScore = Math.max(0, parseInt(String(sp.awayScore), 10) || 0);
+    const homeScore = Math.max(
+      0,
+      parseInt(String(sp.homeScore ?? sp.predictedHomeScore ?? 0), 10) || 0
+    );
+    const awayScore = Math.max(
+      0,
+      parseInt(String(sp.awayScore ?? sp.predictedAwayScore ?? 0), 10) || 0
+    );
 
     return {
-      match: new Types.ObjectId(sp.matchId),
+      match: new Types.ObjectId(matchIdStr),
       predictedHomeScore: homeScore,
       predictedAwayScore: awayScore,
       status: 'pending' as const,
@@ -340,32 +366,23 @@ const settlePredictionRoundInDB = async (roundId: string): Promise<any> => {
     up.totalOutcomeMatches = outcomeMatches;
     up.totalCoinsEarned = totalCoins;
 
-    // Award coins to user wallet if > 0 and not yet awarded
+    // Award coins to player wallet if > 0 and not yet awarded
     if (totalCoins > 0 && !up.hasClaimedOrAwarded) {
-      const user = await User.findById(up.user);
-      if (user) {
-        const balBefore = user.engCoine || 0;
-        const balAfter = balBefore + totalCoins;
-
-        await User.findByIdAndUpdate(up.user, {
-          $inc: { engCoine: totalCoins, rewardPoint: totalCoins },
-        });
-
-        await CoinTransaction.create({
-          user: up.user,
-          type: 'CREDIT',
+      try {
+        await recordCoinTransaction({
+          userId: up.user.toString(),
           amount: totalCoins,
-          balanceBefore: balBefore,
-          balanceAfter: balAfter,
           category: COIN_TRANSACTION_CATEGORY.SCORE_PREDICTION_REWARD,
           title: `Score Prediction Reward: ${round.title}`,
           description: `Predicted ${exactMatches} exact scores and ${outcomeMatches} correct outcomes.`,
-          referenceId: round._id.toString(),
+          referenceId: `${round._id.toString()}_prediction_reward`,
         });
 
         up.hasClaimedOrAwarded = true;
         totalDistributedCoins += totalCoins;
         totalWinnersCount += 1;
+      } catch (coinErr) {
+        console.error('Failed to record coin transaction for score prediction:', coinErr);
       }
     }
 

@@ -6,6 +6,7 @@ import { User } from '../user/user.model';
 import { Types } from 'mongoose';
 import { recordCoinTransaction } from '../../../helpers/coinLedgerHelper';
 import { COIN_TRANSACTION_CATEGORY } from '../coinTransaction/coinTransaction.interface';
+import { resolveEffectivePlayerForAction } from '../../../helpers/playerProfileResolver';
 
 const parsePayload = (payload: any): any => {
   const data = { ...payload };
@@ -131,7 +132,8 @@ const getSingleQuizFromDB = async (id: string, includeAnswers = true): Promise<a
 
 const getActiveQuizzesForClientFromDB = async (
   query: Record<string, unknown>,
-  currentUserId?: string
+  currentUserId?: string,
+  requestedProfileId?: string
 ): Promise<any[]> => {
   const now = new Date();
 
@@ -156,10 +158,23 @@ const getActiveQuizzesForClientFromDB = async (
 
   let userAttemptsMap = new Map<string, any>();
   if (currentUserId && quizzes.length > 0) {
+    let effectivePlayerId = currentUserId;
+    try {
+      const resolved = await resolveEffectivePlayerForAction(
+        currentUserId,
+        requestedProfileId
+      );
+      if (resolved?._id) {
+        effectivePlayerId = resolved._id.toString();
+      }
+    } catch {
+      // Fallback to currentUserId
+    }
+
     const quizIds = quizzes.map((q) => q._id);
     const attempts = await QuizAttempt.find({
       quiz: { $in: quizIds },
-      user: currentUserId,
+      user: effectivePlayerId,
     })
       .sort({ score: -1 })
       .lean();
@@ -278,22 +293,19 @@ const submitQuizAttemptInDB = async (
   const percentage = totalPossible > 0 ? Number(((earnedScore / totalPossible) * 100).toFixed(1)) : 0;
   const isPassed = percentage >= quiz.passingPercentage;
 
-  // Determine rewards (Award points if passed on this attempt)
+  // Determine rewards (Award ENG coins if passed on this attempt - do NOT add to rewardPoint)
   let rewardToAward = 0;
   if (isPassed && quiz.rewardPoints > 0) {
     rewardToAward = quiz.rewardPoints;
-    // Award reward points (recordCoinTransaction handles engCoine and coin ledger)
-    await User.findByIdAndUpdate(userId, {
-      $inc: { rewardPoint: rewardToAward },
-    });
 
+    // Credit ENG coins and record in CoinTransaction ledger (no rewardPoint modification)
     try {
       await recordCoinTransaction({
         userId,
         amount: rewardToAward,
         category: COIN_TRANSACTION_CATEGORY.QUIZ_REWARD,
-        title: `Quiz Passed: ${quiz.title}`,
-        description: `Earned ${rewardToAward} coins for scoring ${percentage}% on "${quiz.title}"`,
+        title: `Quiz Reward: ${quiz.title}`,
+        description: `Earned ${rewardToAward} ENG coins for passing quiz "${quiz.title}" with score ${percentage}%.`,
         referenceId: `${quiz._id.toString()}_quiz_reward`,
       });
     } catch (coinErr) {

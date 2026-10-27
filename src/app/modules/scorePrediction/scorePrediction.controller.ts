@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { ScorePredictionService } from './scorePrediction.service';
+import { resolveEffectivePlayerForAction } from '../../../helpers/playerProfileResolver';
 
 const createPredictionRound = catchAsync(async (req: Request, res: Response) => {
   const payload = { ...req.body };
@@ -57,9 +58,14 @@ const getSinglePredictionRound = catchAsync(async (req: Request, res: Response) 
 
 const getActivePredictionRounds = catchAsync(async (req: Request, res: Response) => {
   const currentUserId = (req.user as any)?.id || (req.user as any)?._id;
+  const requestedProfileId = (req.query?.profileId ||
+    req.query?.childId ||
+    req.query?.playerId) as string | undefined;
+
   const result = await ScorePredictionService.getActivePredictionRoundsForClientFromDB(
     req.query,
-    currentUserId
+    currentUserId,
+    requestedProfileId
   );
 
   sendResponse(res, {
@@ -72,8 +78,14 @@ const getActivePredictionRounds = catchAsync(async (req: Request, res: Response)
 
 const submitUserPrediction = catchAsync(async (req: Request, res: Response) => {
   const roundId = req.params.id as string;
-  const userId = (req.user as any)?.id || (req.user as any)?._id;
+  const authUserId = (req.user as any)?.id || (req.user as any)?._id;
   const { predictions } = req.body;
+  const requestedProfileId = (req.body?.profileId ||
+    req.body?.childId ||
+    req.body?.playerId ||
+    req.query?.profileId ||
+    req.query?.childId ||
+    req.query?.playerId) as string | undefined;
 
   if (!Array.isArray(predictions)) {
     return sendResponse(res, {
@@ -84,9 +96,16 @@ const submitUserPrediction = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
+  // Strictly resolve effective player (Parent -> Child Player or Player directly)
+  const effectivePlayer = await resolveEffectivePlayerForAction(
+    authUserId,
+    requestedProfileId
+  );
+  const playerId = effectivePlayer._id.toString();
+
   const result = await ScorePredictionService.submitUserPredictionInDB(
     roundId,
-    userId,
+    playerId,
     predictions
   );
 
@@ -124,8 +143,18 @@ const getRoundLeaderboard = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getMyPredictions = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req.user as any)?.id || (req.user as any)?._id;
-  const result = await ScorePredictionService.getMyPredictionsFromDB(userId);
+  const authUserId = (req.user as any)?.id || (req.user as any)?._id;
+  const requestedProfileId = (req.query?.profileId ||
+    req.query?.childId ||
+    req.query?.playerId) as string | undefined;
+
+  const effectivePlayer = await resolveEffectivePlayerForAction(
+    authUserId,
+    requestedProfileId
+  );
+  const playerId = effectivePlayer._id.toString();
+
+  const result = await ScorePredictionService.getMyPredictionsFromDB(playerId);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
