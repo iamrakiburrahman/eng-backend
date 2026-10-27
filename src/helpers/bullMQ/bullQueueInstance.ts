@@ -63,3 +63,10 @@ export const cleanupQueue = new Queue<CleanupJobData>(QUEUE_NAMES.CLEANUP, {
           removeOnComplete: true,
      },
 });
+
+// Attach error handlers to prevent unhandled 'error' event exceptions
+[emailQueue, notificationQueue, smsQueue, cleanupQueue].forEach((queue) => {
+     queue.on('error', (err) => {
+          // Error is also logged on redisConnection
+     });
+});

@@ -22,6 +22,13 @@ const notificationQueueEvents = new QueueEvents(QUEUE_NAMES.NOTIFICATION, {
 const smsQueueEvents = new QueueEvents(QUEUE_NAMES.SMS, { connection: redisConnection });
 const cleanupQueueEvents = new QueueEvents(QUEUE_NAMES.CLEANUP, { connection: redisConnection });
 
+// Prevent unhandled Redis error crashes on duplicated QueueEvents connections
+[emailQueueEvents, notificationQueueEvents, smsQueueEvents, cleanupQueueEvents].forEach((qe) => {
+     qe.on('error', () => {
+          // Handled silently since redisConnection.on('error') logs the error
+     });
+});
+
 // ==========================================
 // SETUP QUEUE EVENTS
 // ==========================================
