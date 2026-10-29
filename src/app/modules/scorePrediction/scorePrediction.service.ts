@@ -7,6 +7,7 @@ import { User } from '../user/user.model';
 import { CoinTransaction } from '../coinTransaction/coinTransaction.model';
 import { COIN_TRANSACTION_CATEGORY } from '../coinTransaction/coinTransaction.interface';
 import { Types } from 'mongoose';
+import { VenueCategory } from '../venueCategory/venueCategory.model';
 import { recordCoinTransaction } from '../../../helpers/coinLedgerHelper';
 import { resolveEffectivePlayerForAction } from '../../../helpers/playerProfileResolver';
 
@@ -39,6 +40,101 @@ const parseRoundPayload = (payload: any): any => {
   }
 
   return data;
+};
+
+const resolveVenueNamesForMatches = async (matches: any[]): Promise<any[]> => {
+  if (!Array.isArray(matches) || matches.length === 0) return matches;
+
+  // Collect all potential VenueCategory ObjectIds across the matches
+  const venueCategoryIds = new Set<string>();
+
+  for (const m of matches) {
+    if (!m) continue;
+    const rawVenue = (m.venueName || '').toString().trim();
+    if (rawVenue && Types.ObjectId.isValid(rawVenue)) {
+      venueCategoryIds.add(rawVenue);
+    }
+    const catId = m.venueCategory?._id || m.venueCategory;
+    if (catId && Types.ObjectId.isValid(catId.toString())) {
+      venueCategoryIds.add(catId.toString());
+    }
+    const subCatId = m.venueSubCategory?._id || m.venueSubCategory;
+    if (subCatId && Types.ObjectId.isValid(subCatId.toString())) {
+      venueCategoryIds.add(subCatId.toString());
+    }
+  }
+
+  const venueMap = new Map<string, any>();
+  if (venueCategoryIds.size > 0) {
+    const venueCatDocs = await VenueCategory.find({
+      _id: { $in: Array.from(venueCategoryIds).map((id) => new Types.ObjectId(id)) },
+    })
+      .populate('parentCategory', 'name')
+      .lean();
+
+    venueCatDocs.forEach((doc: any) => {
+      venueMap.set(doc._id.toString(), doc);
+    });
+  }
+
+  return matches.map((m) => {
+    if (!m) return m;
+    const matchObj = typeof m.toObject === 'function' ? m.toObject() : { ...m };
+
+    const parts: string[] = [];
+    let rawVenueName = (matchObj.venueName || '').toString().trim();
+
+    // 1. If rawVenueName is a valid ObjectId, try finding its VenueCategory document
+    if (rawVenueName && Types.ObjectId.isValid(rawVenueName)) {
+      const doc = venueMap.get(rawVenueName);
+      if (doc) {
+        if (doc.parentCategory && (doc.parentCategory as any).name) {
+          parts.push((doc.parentCategory as any).name);
+        }
+        parts.push(doc.name);
+        rawVenueName = ''; // reset since resolved
+      }
+    }
+
+    // 2. Add raw text venueName if not ObjectId and not already included
+    if (rawVenueName && !Types.ObjectId.isValid(rawVenueName) && !parts.includes(rawVenueName)) {
+      parts.push(rawVenueName);
+    }
+
+    // 3. Add venueCategory name if present
+    const catId = matchObj.venueCategory?._id || matchObj.venueCategory;
+    const catDoc = catId ? venueMap.get(catId.toString()) : null;
+    const catName = matchObj.venueCategory?.name || catDoc?.name || '';
+    if (catName && !parts.includes(catName)) {
+      parts.push(catName);
+    }
+
+    // 4. Add venueSubCategory name if present
+    const subCatId = matchObj.venueSubCategory?._id || matchObj.venueSubCategory;
+    const subCatDoc = subCatId ? venueMap.get(subCatId.toString()) : null;
+    const subCatName = matchObj.venueSubCategory?.name || subCatDoc?.name || '';
+    if (subCatName && !parts.includes(subCatName)) {
+      parts.push(subCatName);
+    }
+
+    // 5. Fallback to matchObj.venue if present
+    if (parts.length === 0 && matchObj.venue && typeof matchObj.venue === 'string' && !Types.ObjectId.isValid(matchObj.venue)) {
+      parts.push(matchObj.venue);
+    }
+
+    const finalVenueName =
+      parts.length > 0
+        ? parts.join(', ')
+        : Types.ObjectId.isValid(matchObj.venueName)
+          ? ''
+          : matchObj.venueName || '';
+
+    matchObj.venueName = finalVenueName;
+    if (typeof m === 'object' && m !== null) {
+      m.venueName = finalVenueName;
+    }
+    return matchObj;
+  });
 };
 
 const createPredictionRoundInDB = async (payload: Partial<IScorePredictionRound>): Promise<IScorePredictionRound> => {
@@ -82,7 +178,7 @@ const getAllPredictionRoundsFromDB = async (
       .populate('league', 'leagueName season ageGroup')
       .populate({
         path: 'matches',
-        select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore',
+        select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore formation venueCategory venueSubCategory',
         populate: [
           { path: 'homeTeam', select: 'teamName shortName teamLogo' },
           { path: 'awayTeam', select: 'teamName shortName teamLogo' },
@@ -94,6 +190,16 @@ const getAllPredictionRoundsFromDB = async (
       .lean(),
     ScorePredictionRound.countDocuments(filter),
   ]);
+
+  const allMatches: any[] = [];
+  for (const round of rounds) {
+    if (Array.isArray(round.matches)) {
+      allMatches.push(...round.matches);
+    }
+  }
+  if (allMatches.length > 0) {
+    await resolveVenueNamesForMatches(allMatches);
+  }
 
   return {
     data: rounds,
@@ -109,7 +215,7 @@ const getSinglePredictionRoundFromDB = async (id: string): Promise<any> => {
     .populate('league', 'leagueName season ageGroup')
     .populate({
       path: 'matches',
-      select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore formation',
+      select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore formation venueCategory venueSubCategory',
       populate: [
         { path: 'homeTeam', select: 'teamName shortName teamLogo' },
         { path: 'awayTeam', select: 'teamName shortName teamLogo' },
@@ -119,6 +225,10 @@ const getSinglePredictionRoundFromDB = async (id: string): Promise<any> => {
 
   if (!round) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Score prediction round not found.');
+  }
+
+  if (Array.isArray(round.matches) && round.matches.length > 0) {
+    round.matches = await resolveVenueNamesForMatches(round.matches);
   }
 
   return round;
@@ -144,7 +254,7 @@ const getActivePredictionRoundsForClientFromDB = async (
     .populate('league', 'leagueName season ageGroup')
     .populate({
       path: 'matches',
-      select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore',
+      select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore formation venueCategory venueSubCategory',
       populate: [
         { path: 'homeTeam', select: 'teamName shortName teamLogo' },
         { path: 'awayTeam', select: 'teamName shortName teamLogo' },
@@ -152,6 +262,16 @@ const getActivePredictionRoundsForClientFromDB = async (
     })
     .sort({ lockTime: 1 })
     .lean();
+
+  const allActiveMatches: any[] = [];
+  for (const round of rounds) {
+    if (Array.isArray(round.matches)) {
+      allActiveMatches.push(...round.matches);
+    }
+  }
+  if (allActiveMatches.length > 0) {
+    await resolveVenueNamesForMatches(allActiveMatches);
+  }
 
   let userPredictionsMap = new Map<string, any>();
   if (currentUserId && rounds.length > 0) {
@@ -416,14 +536,14 @@ const getRoundLeaderboardFromDB = async (roundId: string, limit = 25): Promise<a
 };
 
 const getMyPredictionsFromDB = async (userId: string): Promise<any[]> => {
-  return UserScorePrediction.find({ user: userId })
+  const predictions = await UserScorePrediction.find({ user: userId })
     .populate({
       path: 'round',
       select: 'title banner lockTime status coinsPerExactScore jackpotBonusCoins',
     })
     .populate({
       path: 'predictions.match',
-      select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore',
+      select: 'homeTeam awayTeam matchDate venueName status homeScore awayScore formation venueCategory venueSubCategory',
       populate: [
         { path: 'homeTeam', select: 'teamName shortName teamLogo' },
         { path: 'awayTeam', select: 'teamName shortName teamLogo' },
@@ -431,6 +551,23 @@ const getMyPredictionsFromDB = async (userId: string): Promise<any[]> => {
     })
     .sort({ submittedAt: -1 })
     .lean();
+
+  const allMatches: any[] = [];
+  for (const p of predictions) {
+    if (Array.isArray(p.predictions)) {
+      for (const item of p.predictions) {
+        if (item.match && typeof item.match === 'object') {
+          allMatches.push(item.match);
+        }
+      }
+    }
+  }
+
+  if (allMatches.length > 0) {
+    await resolveVenueNamesForMatches(allMatches);
+  }
+
+  return predictions;
 };
 
 const updatePredictionRoundInDB = async (
