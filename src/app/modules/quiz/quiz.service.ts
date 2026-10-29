@@ -369,8 +369,17 @@ const submitQuizAttemptInDB = async (
   };
 };
 
-const getQuizLeaderboardFromDB = async (quizId: string, limit = 20): Promise<any[]> => {
-  return QuizAttempt.find({ quiz: quizId, isPassed: true })
+const getQuizLeaderboardFromDB = async (
+  quizId: string,
+  limit = 20,
+  passedOnly = false
+): Promise<any[]> => {
+  const filter: Record<string, any> = { quiz: quizId };
+  if (passedOnly) {
+    filter.isPassed = true;
+  }
+
+  return QuizAttempt.find(filter)
     .populate('user', 'firstName lastName profile userName')
     .sort({ score: -1, timeTakenSeconds: 1, completedAt: 1 })
     .limit(limit)

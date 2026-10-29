@@ -124,7 +124,8 @@ const submitQuizAttempt = catchAsync(async (req: Request, res: Response) => {
 const getQuizLeaderboard = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const limit = Number(req.query.limit) || 20;
-  const result = await QuizService.getQuizLeaderboardFromDB(id, limit);
+  const passedOnly = req.query.passedOnly === 'true';
+  const result = await QuizService.getQuizLeaderboardFromDB(id, limit, passedOnly);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
