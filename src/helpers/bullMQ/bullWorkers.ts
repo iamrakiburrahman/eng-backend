@@ -425,4 +425,19 @@ export const cleanupWorker = new Worker<CleanupJobData>(
      },
 );
 
+[emailWorker, notificationWorker, smsWorker, cleanupWorker].forEach((worker) => {
+     worker.on('error', (err: any) => {
+          const msg = err?.message || '';
+          if (
+               msg.includes('NOAUTH') ||
+               msg.includes('WRONGPASS') ||
+               msg.includes('ECONNREFUSED')
+          ) {
+               // Connection/auth errors are logged cleanly by redisConnection.on('error')
+               return;
+          }
+          errorLogger.error(colors.red(`[BullMQ] Worker error: ${msg}`));
+     });
+});
+
 logger.info(colors.bgMagenta.white('All BullMQ workers are running'));

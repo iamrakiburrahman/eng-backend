@@ -1,6 +1,70 @@
 import dotenv from "dotenv";
 import path from "path";
 dotenv.config({ path: path.join(process.cwd(), ".env") });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+const buildRedisConfig = () => {
+  const rawUrl = process.env.REDIS_URL?.trim();
+  const envHost = process.env.REDIS_HOST?.trim() || "localhost";
+  const envPort = Number(process.env.REDIS_PORT?.trim() || "6379") || 6379;
+  const envUsername = process.env.REDIS_USERNAME?.trim();
+  const envPassword = process.env.REDIS_PASSWORD?.trim();
+  const envDb =
+    process.env.REDIS_DB !== undefined && process.env.REDIS_DB.trim() !== ""
+      ? Number(process.env.REDIS_DB.trim())
+      : undefined;
+
+  if (rawUrl) {
+    try {
+      const normalized = /^rediss?:\/\//i.test(rawUrl) ? rawUrl : `redis://${rawUrl}`;
+      const parsed = new URL(normalized);
+      if (!parsed.password && envPassword) {
+        parsed.password = envPassword;
+      }
+      if (!parsed.username && envUsername) {
+        parsed.username = envUsername;
+      }
+      const dbFromPath =
+        parsed.pathname && parsed.pathname.length > 1
+          ? Number(parsed.pathname.slice(1))
+          : undefined;
+
+      return {
+        url: parsed.toString(),
+        host: parsed.hostname || envHost,
+        port: parsed.port ? Number(parsed.port) : envPort,
+        username: parsed.username ? decodeURIComponent(parsed.username) : envUsername || undefined,
+        password: parsed.password ? decodeURIComponent(parsed.password) : envPassword || undefined,
+        db: Number.isFinite(envDb) ? Number(envDb) : Number.isFinite(dbFromPath) ? Number(dbFromPath) : 0,
+      };
+    } catch {
+      return {
+        url: rawUrl,
+        host: envHost,
+        port: envPort,
+        username: envUsername || undefined,
+        password: envPassword || undefined,
+        db: Number.isFinite(envDb) ? Number(envDb) : 0,
+      };
+    }
+  }
+
+  const protocol = process.env.REDIS_TLS === "true" ? "rediss" : "redis";
+  const authPart = envPassword
+    ? `${envUsername ? encodeURIComponent(envUsername) : ""}:${encodeURIComponent(envPassword)}@`
+    : "";
+
+  return {
+    url: `${protocol}://${authPart}${envHost}:${envPort}`,
+    host: envHost,
+    port: envPort,
+    username: envUsername || undefined,
+    password: envPassword || undefined,
+    db: Number.isFinite(envDb) ? Number(envDb) : 0,
+  };
+};
+const redisConfig = buildRedisConfig();
+
 export default {
   ip_address: process.env.IP_ADDRESS,
   port: process.env.PORT,
@@ -53,8 +117,12 @@ export default {
   },
   frontendUrl: process.env.FRONTEND_URL,
   redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    db: process.env.REDIS_DB || 0,
+    url: redisConfig.url,
+    host: redisConfig.host,
+    port: redisConfig.port,
+    username: redisConfig.username,
+    password: redisConfig.password,
+    db: redisConfig.db,
   },
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID,

@@ -2,22 +2,9 @@ import colors from "colors";
 import { Server, Socket } from "socket.io";
 import { logger } from "../shared/logger";
 import { socketService } from "./socket/service";
-import { createAdapter } from "@socket.io/redis-adapter";
-import Redis from "ioredis";
-import config from "../config";
 
 const socket = (io: Server) => {
-  // Initialize Socket.io Redis Adapter for Cluster Mode scaling
-  try {
-    const pubClient = new Redis(config.redis.url || "redis://localhost:6379");
-    const subClient = pubClient.duplicate();
-    io.adapter(createAdapter(pubClient, subClient));
-    logger.info(colors.green("✅ Socket.io Redis Adapter initialized successfully"));
-  } catch (err) {
-    logger.error(colors.red("❌ Failed to initialize Socket.io Redis Adapter:"), err);
-  }
-
-  // Initialize SocketService
+  // Initialize SocketService (Redis Adapter is initialized in serverLifecycle.ts)
   socketService.init(io);
 
   io.on("connection", (socket: Socket) => {

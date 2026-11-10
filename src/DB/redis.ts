@@ -11,6 +11,8 @@ let isRedisConnected = false;
 // ==========================================
 const REDIS_CONFIG: RedisClientOptions = {
      url: config.redis.url || 'redis://localhost:6379',
+     ...(config.redis.username ? { username: config.redis.username } : {}),
+     ...(config.redis.password ? { password: config.redis.password } : {}),
      socket: {
           connectTimeout: 10000,
           reconnectStrategy: (retries: number) => {
