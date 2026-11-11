@@ -25,8 +25,8 @@ export async function connectServices(): Promise<void> {
      // 1. Connect to MongoDB
      try {
           await mongoose.connect(config.database_url as string, {
-               maxPoolSize: 20,
-               minPoolSize: 2,
+               maxPoolSize: 25,
+               minPoolSize: 5,
           });
           logger.info(colors.green('🚀 Database connected successfully'));
      } catch (dbError) {
@@ -171,11 +171,11 @@ export async function gracefulShutdown(signal: string, server: http.Server | any
                process.exit(0); // Clean exit so ts-node-dev can restart on filesave
           });
 
-          // Safety net: force-exit after 3s
+          // Safety net: force-exit after 6s (under PM2 kill_timeout of 8s)
           setTimeout(() => {
-               logger.info(colors.red('Force exiting after 3s timeout'));
+               logger.info(colors.red('Force exiting after 6s timeout'));
                process.exit(0);
-          }, 3000).unref();
+          }, 6000).unref();
      } else {
           process.exit(0);
      }
