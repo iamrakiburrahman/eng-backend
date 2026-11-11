@@ -4,6 +4,8 @@ import { logger, errorLogger } from '../shared/logger';
 import config from '../config';
 
 let redisClient: RedisClientType | null = null;
+let socketPubClient: RedisClientType | null = null;
+let socketSubClient: RedisClientType | null = null;
 let isRedisConnected = false;
 
 // ==========================================
@@ -84,15 +86,31 @@ function setupRedisListeners(): void {
 
 // Disconnect from Redis
 export async function disconnectRedis(): Promise<void> {
-     if (redisClient && isRedisConnected) {
+     const clients: Array<{ name: string; client: RedisClientType | null }> = [
+          { name: 'Main Redis', client: isRedisConnected ? redisClient : null },
+          { name: 'Socket Pub Redis', client: socketPubClient },
+          { name: 'Socket Sub Redis', client: socketSubClient },
+     ];
+
+     for (const { name, client } of clients) {
+          if (!client) continue;
           try {
-               await redisClient.quit();
-               logger.info(colors.green('✅ Redis disconnected gracefully'));
+               if (client.isOpen) {
+                    await client.quit();
+               }
+               logger.info(colors.green(`✅ ${name} disconnected gracefully`));
           } catch (error) {
-               errorLogger.error(colors.red('Error disconnecting Redis:'), error);
-               await redisClient.disconnect();
+               errorLogger.error(colors.red(`Error disconnecting ${name}:`), error);
+               try {
+                    await client.disconnect();
+               } catch {
+                    // ignore cleanup failure
+               }
           }
      }
+
+     socketPubClient = null;
+     socketSubClient = null;
 }
 
 // Get Redis client
@@ -123,6 +141,9 @@ export async function createSocketRedisClients() {
 
           // Connect both
           await Promise.all([pubClient.connect(), subClient.connect()]);
+
+          socketPubClient = pubClient;
+          socketSubClient = subClient;
 
           logger.info(colors.cyan('🔌 Socket.io Redis Adapter connected to DB 2'));
 

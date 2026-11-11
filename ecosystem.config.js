@@ -7,10 +7,10 @@ module.exports = {
       exec_mode: 'cluster',
       autorestart: true,
       watch: false,
-      max_memory_restart: '3G',
+      max_memory_restart: '1G',
       kill_timeout: 5000,
-      wait_ready: false,
-      listen_timeout: 10000,
+      wait_ready: true,
+      listen_timeout: 15000,
       max_restarts: 10,
       min_uptime: '10s',
       restart_delay: 4000,
@@ -18,14 +18,15 @@ module.exports = {
       out_file: 'logs/pm2-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
-      log_type: 'json',
+      env: {
+        NODE_ENV: 'production',
+      },
       env_production: {
         NODE_ENV: 'production',
-        PORT: process.env.PORT || 5005,
       },
       source_map_support: true,
       instance_var: 'INSTANCE_ID',
-      node_args: '--max-old-space-size=3072',
+      node_args: '--max-old-space-size=1024',
     },
   ],
-}
+};

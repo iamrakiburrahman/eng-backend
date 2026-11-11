@@ -2140,12 +2140,32 @@ export async function checkAndFinishExpiredMatches() {
       }
 
       if (elapsed >= halfTimeSeconds) {
-        match.elapsedSeconds = halfTimeSeconds;
-        match.timerStatus = "finished";
-        match.timerStartedAt = null;
-        match.status = "finished";
-        if (!match.finishedAt) match.finishedAt = new Date();
-        await match.save();
+        const finishedAt = match.finishedAt || new Date();
+        const claimedMatch = await Match.findOneAndUpdate(
+          {
+            _id: match._id,
+            status: "live",
+            timerStatus: "running",
+            period: "second_half",
+          },
+          {
+            $set: {
+              elapsedSeconds: halfTimeSeconds,
+              timerStatus: "finished",
+              timerStartedAt: null,
+              status: "finished",
+              finishedAt,
+            },
+          },
+          { new: true }
+        );
+
+        if (!claimedMatch) continue;
+
+
+
+
+
 
         await emitMatchUpdate(match._id.toString());
 

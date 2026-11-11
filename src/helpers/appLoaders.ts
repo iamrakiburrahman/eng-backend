@@ -4,6 +4,7 @@ import session from 'express-session';
 import path from 'path';
 import { StatusCodes } from 'http-status-codes';
 import { Morgan } from '../shared/morgan';
+import { errorLogger } from '../shared/logger';
 import config from '../config';
 import handleStripeWebhook from './handleStripeWebhook';
 import router from '../app/routes';
@@ -11,8 +12,49 @@ import { globalLimiter, imageLimiter } from '../app/middlewares/rateLimiter';
 import { maintenanceMiddleware } from '../app/middlewares/maintenanceMiddleware';
 import globalErrorHandler from '../app/middlewares/globalErrorHandler';
 import { welcome } from '../util/welcome';
-export const allowedOrigins =
-     config.allowed_origins?.split(',').map((origin: string) => origin.trim()) || [];
+const normalizeOrigin = (raw: string): string => {
+     const cleaned = raw.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+     if (!cleaned || cleaned === '*') return cleaned;
+     try {
+          return new URL(cleaned).origin.toLowerCase();
+     } catch {
+          return cleaned.toLowerCase();
+     }
+};
+
+const rawAllowedOrigins = [
+     ...(config.allowed_origins ? config.allowed_origins.split(',') : []),
+     ...(config.frontendUrl && /^https?:\/\//i.test(config.frontendUrl)
+          ? [config.frontendUrl]
+          : []),
+];
+
+export const allowedOrigins = Array.from(
+     new Set(rawAllowedOrigins.map(normalizeOrigin).filter(Boolean)),
+);
+
+export const corsOriginValidator = (
+     origin: string | undefined,
+     callback: (err: Error | null, allow?: boolean) => void,
+): void => {
+     // Allow requests with no origin (like mobile apps, curl, postman)
+     if (!origin) return callback(null, true);
+
+     // In development, reflect request origin to bypass wildcard restriction with credentials
+     if (config.node_env !== 'production') {
+          return callback(null, true);
+     }
+
+     const normalized = normalizeOrigin(origin);
+     if (allowedOrigins.includes('*') || allowedOrigins.includes(normalized)) {
+          return callback(null, true);
+     }
+
+     errorLogger.error(
+          `[CORS] Blocked origin: "${origin}" (normalized: "${normalized}"). Allowed origins: [${allowedOrigins.join(', ')}]`,
+     );
+     return callback(new Error('Not allowed by CORS'));
+};
 export function configureMiddlewares(app: Express): void {
      // ✅ EJS view engine for Stripe payment redirect pages
      app.set('view engine', 'ejs');
@@ -29,23 +71,9 @@ export function configureMiddlewares(app: Express): void {
 
      app.use(
           cors({
-               origin: (origin, callback) => {
-                    // Allow requests with no origin (like mobile apps, curl, postman)
-                    if (!origin) return callback(null, true);
-
-                    // In development, reflect request origin to bypass wildcard restriction with credentials
-                    if (config.node_env !== 'production') {
-                         return callback(null, true);
-                    }
-
-                    // In production, check if the origin is in the allowed list
-                    if (allowedOrigins.includes(origin)) {
-                         return callback(null, true);
-                    } else {
-                         return callback(new Error('Not allowed by CORS'));
-                    }
-               },
+               origin: corsOriginValidator,
                credentials: true,
+               optionsSuccessStatus: 204,
           })
      );
      app.use(express.json({ limit: '50mb' }));

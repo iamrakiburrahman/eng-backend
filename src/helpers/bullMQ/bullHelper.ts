@@ -110,7 +110,7 @@ export class NotificationQueueHelper {
                });
 
                // Deduplicate rapid duplicate triggers within 15 seconds
-               if (isDuplicateNotification(dedupKey, 15)) {
+               if (await isDuplicateNotification(dedupKey, 15)) {
                     return null;
                }
 
@@ -144,7 +144,7 @@ export class NotificationQueueHelper {
                );
                return job.id;
           } catch (error) {
-               clearDuplicateNotification(dedupKey);
+               await clearDuplicateNotification(dedupKey);
                 logger.error(colors.red('Failed to queue notification:'), error);
                 return null;
           }
@@ -210,7 +210,7 @@ export class NotificationQueueHelper {
                     });
 
                // Deduplicate rapid duplicate clicks within 15 seconds
-               if (isDuplicateNotification(dedupKey, 15)) {
+               if (await isDuplicateNotification(dedupKey, 15)) {
                     return null;
                }
 
@@ -246,7 +246,7 @@ export class NotificationQueueHelper {
                );
                return job.id;
           } catch (error) {
-               clearDuplicateNotification(dedupKey);
+               await clearDuplicateNotification(dedupKey);
                 logger.error(colors.red(`Failed to queue team subscriber notification for team ${teamId}:`), error);
                 return null;
           }

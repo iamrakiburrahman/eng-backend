@@ -10,24 +10,38 @@ import { connectToRedis, disconnectRedis, createSocketRedisClients } from '../DB
 import { setupQueueEvents, setupWorkerEvents, closeBullMQ } from '../DB/bullMQ';
 import { CleanupQueueHelper } from './bullMQ/bullHelper';
 import { socketHelper } from './socketHelper';
-import { allowedOrigins } from './appLoaders';
+import { corsOriginValidator } from './appLoaders';
+
+export function isPrimaryClusterWorker(): boolean {
+     const instanceId = process.env.INSTANCE_ID ?? process.env.NODE_APP_INSTANCE;
+     return instanceId === undefined || instanceId === '0';
+}
+
+const backgroundTimers: ReturnType<typeof setInterval>[] = [];
 
 export async function connectServices(): Promise<void> {
+     const isPrimaryWorker = isPrimaryClusterWorker();
+
      // 1. Connect to MongoDB
      try {
-          await mongoose.connect(config.database_url as string);
+          await mongoose.connect(config.database_url as string, {
+               maxPoolSize: 20,
+               minPoolSize: 2,
+          });
           logger.info(colors.green('🚀 Database connected successfully'));
      } catch (dbError) {
           errorLogger.error(colors.red('🤢 Failed to connect to Database:'), dbError);
           throw dbError;
      }
 
-     // 2. Seed Super Admin
-     try {
-          await seedSuperAdmin();
-     } catch (seedError) {
-          errorLogger.error(colors.red('🤢 Failed to seed Super Admin:'), seedError);
-          throw seedError;
+     // 2. Seed Super Admin (Primary worker only to prevent multi-worker race conditions)
+     if (isPrimaryWorker) {
+          try {
+               await seedSuperAdmin();
+          } catch (seedError) {
+               errorLogger.error(colors.red('🤢 Failed to seed Super Admin:'), seedError);
+               throw seedError;
+          }
      }
 
      // 3. Connect to Redis Caching
@@ -40,58 +54,61 @@ export async function connectServices(): Promise<void> {
 
      // 4. Initialize BullMQ Queue & Worker Events + Schedule Repeatable Jobs
      try {
-          setupQueueEvents();
+          if (isPrimaryWorker) {
+               setupQueueEvents();
+          }
           setupWorkerEvents();
-          await CleanupQueueHelper.scheduleRepeatableJobs();
+          if (isPrimaryWorker) {
+               await CleanupQueueHelper.scheduleRepeatableJobs();
+          }
      } catch (bullMQError) {
           errorLogger.error(colors.red('🤢 Failed to initialize BullMQ:'), bullMQError);
           throw bullMQError;
      }
 
-     // 5. Periodic background auto-finish monitor for matches whose timer elapsed
-     setInterval(() => {
-          import('../app/modules/match/match.service')
-               .then(({ checkAndFinishExpiredMatches }) => checkAndFinishExpiredMatches())
-               .catch(() => {});
-     }, 30000).unref();
+     // 5-7. Background schedulers & startup syncs (Primary worker only)
+     if (isPrimaryWorker) {
+          // 5. Periodic background auto-finish monitor for matches whose timer elapsed
+          const matchTimerMonitor = setInterval(() => {
+               import('../app/modules/match/match.service')
+                    .then(({ checkAndFinishExpiredMatches }) => checkAndFinishExpiredMatches())
+                    .catch(() => {});
+          }, 30000);
+          matchTimerMonitor.unref();
+          backgroundTimers.push(matchTimerMonitor);
 
-     // 6. Sync transferred players historical stats to ensure all past and present transfers carry forward
-     import('./playerTransferStatsHelper')
-          .then(({ syncAllApprovedTransfersStats }) => syncAllApprovedTransfersStats())
-          .catch((err) => errorLogger.error('Failed to sync transfer stats on startup:', err));
+          // 6. Sync transferred players historical stats to ensure all past and present transfers carry forward
+          import('./playerTransferStatsHelper')
+               .then(({ syncAllApprovedTransfersStats }) => syncAllApprovedTransfersStats())
+               .catch((err) => errorLogger.error('Failed to sync transfer stats on startup:', err));
 
-     // 7. Check and send 1-day advance push notifications for upcoming matches
-     import('./matchReminderHelper')
-          .then(({ checkAndSendUpcomingMatchReminders }) => checkAndSendUpcomingMatchReminders())
-          .catch((err) => errorLogger.error('Failed to run initial match reminders:', err));
-
-     setInterval(() => {
+          // 7. Check and send 1-day advance push notifications for upcoming matches
           import('./matchReminderHelper')
                .then(({ checkAndSendUpcomingMatchReminders }) => checkAndSendUpcomingMatchReminders())
-               .catch(() => {});
-     }, 10 * 60 * 1000).unref();
+               .catch((err) => errorLogger.error('Failed to run initial match reminders:', err));
+
+          const matchReminderMonitor = setInterval(() => {
+               import('./matchReminderHelper')
+                    .then(({ checkAndSendUpcomingMatchReminders }) => checkAndSendUpcomingMatchReminders())
+                    .catch(() => {});
+          }, 10 * 60 * 1000);
+          matchReminderMonitor.unref();
+          backgroundTimers.push(matchReminderMonitor);
+     }
 }
 
 export async function initSocketServer(server: http.Server): Promise<void> {
+     const socketCors = {
+          origin: corsOriginValidator,
+          credentials: true,
+     };
+
      let io: Server;
      try {
           const { pubClient, subClient } = await createSocketRedisClients();
           io = new Server(server, {
                pingTimeout: 60000,
-               cors: {
-                    origin: (origin, callback) => {
-                         if (!origin) return callback(null, true);
-                         if (config.node_env !== 'production') {
-                              return callback(null, true);
-                         }
-                         if (allowedOrigins.includes(origin)) {
-                              return callback(null, true);
-                         } else {
-                              return callback(new Error('Not allowed by CORS'));
-                         }
-                    },
-                    credentials: true,
-               },
+               cors: socketCors,
                adapter: createAdapter(pubClient, subClient),
           });
           logger.info(colors.green('🚀 Socket.io initialized with Redis Adapter'));
@@ -102,20 +119,7 @@ export async function initSocketServer(server: http.Server): Promise<void> {
           );
           io = new Server(server, {
                pingTimeout: 60000,
-               cors: {
-                    origin: (origin, callback) => {
-                         if (!origin) return callback(null, true);
-                         if (config.node_env !== 'production') {
-                              return callback(null, true);
-                         }
-                         if (allowedOrigins.includes(origin)) {
-                              return callback(null, true);
-                         } else {
-                              return callback(new Error('Not allowed by CORS'));
-                         }
-                    },
-                    credentials: true,
-               },
+               cors: socketCors,
           });
      }
 
@@ -124,6 +128,11 @@ export async function initSocketServer(server: http.Server): Promise<void> {
 }
 
 export async function closeServices(): Promise<void> {
+     while (backgroundTimers.length > 0) {
+          const timer = backgroundTimers.pop();
+          if (timer) clearInterval(timer);
+     }
+
      try {
           await mongoose.connection.close();
           logger.info(colors.green('✅ MongoDB connection closed gracefully'));

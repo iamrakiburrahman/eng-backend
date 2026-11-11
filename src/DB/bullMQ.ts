@@ -13,26 +13,33 @@ import { QUEUE_NAMES } from '../helpers/bullMQ/bullInterface';
 export { redisConnection };
 
 // ==========================================
-// QUEUE EVENTS FOR MONITORING
+// QUEUE EVENTS FOR MONITORING (Primary Cluster Worker Only)
 // ==========================================
-const emailQueueEvents = new QueueEvents(QUEUE_NAMES.EMAIL, { connection: redisConnection });
-const notificationQueueEvents = new QueueEvents(QUEUE_NAMES.NOTIFICATION, {
-     connection: redisConnection,
-});
-const smsQueueEvents = new QueueEvents(QUEUE_NAMES.SMS, { connection: redisConnection });
-const cleanupQueueEvents = new QueueEvents(QUEUE_NAMES.CLEANUP, { connection: redisConnection });
-
-// Prevent unhandled Redis error crashes on duplicated QueueEvents connections
-[emailQueueEvents, notificationQueueEvents, smsQueueEvents, cleanupQueueEvents].forEach((qe) => {
-     qe.on('error', () => {
-          // Handled silently since redisConnection.on('error') logs the error
-     });
-});
+let emailQueueEvents: QueueEvents | null = null;
+let notificationQueueEvents: QueueEvents | null = null;
+let smsQueueEvents: QueueEvents | null = null;
+let cleanupQueueEvents: QueueEvents | null = null;
 
 // ==========================================
 // SETUP QUEUE EVENTS
 // ==========================================
 export function setupQueueEvents(): void {
+     if (emailQueueEvents) return;
+
+     emailQueueEvents = new QueueEvents(QUEUE_NAMES.EMAIL, { connection: redisConnection });
+     notificationQueueEvents = new QueueEvents(QUEUE_NAMES.NOTIFICATION, {
+          connection: redisConnection,
+     });
+     smsQueueEvents = new QueueEvents(QUEUE_NAMES.SMS, { connection: redisConnection });
+     cleanupQueueEvents = new QueueEvents(QUEUE_NAMES.CLEANUP, { connection: redisConnection });
+
+     // Prevent unhandled Redis error crashes on duplicated QueueEvents connections
+     [emailQueueEvents, notificationQueueEvents, smsQueueEvents, cleanupQueueEvents].forEach((qe) => {
+          qe.on('error', () => {
+               // Handled silently since redisConnection.on('error') logs the error
+          });
+     });
+
      // Email Queue Events
      emailQueueEvents.on('completed', ({ jobId }) => {
           logger.info(colors.green(`[BullMQ] Email job ${jobId} completed`));
@@ -176,20 +183,24 @@ export async function closeBullMQ(): Promise<void> {
                cleanupWorker,
           } = require('../helpers/bullMQ/bullWorkers');
 
-          await Promise.all([
+          const closeTasks: Promise<unknown>[] = [
                emailQueue.close(),
                notificationQueue.close(),
                smsQueue.close(),
                cleanupQueue.close(),
-               emailQueueEvents.close(),
-               notificationQueueEvents.close(),
-               smsQueueEvents.close(),
-               cleanupQueueEvents.close(),
                emailWorker.close(),
                notificationWorker.close(),
                smsWorker.close(),
                cleanupWorker.close(),
-          ]);
+          ];
+
+          [emailQueueEvents, notificationQueueEvents, smsQueueEvents, cleanupQueueEvents].forEach(
+               (qe) => {
+                    if (qe) closeTasks.push(qe.close());
+               },
+          );
+
+          await Promise.all(closeTasks);
 
           await redisConnection.quit();
 

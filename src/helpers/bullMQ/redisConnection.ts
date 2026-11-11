@@ -25,10 +25,6 @@ export const redisConnection = new IORedis(
 let lastAuthErrorLoggedAt = 0;
 
 // Connection events
-redisConnection.on('connect', () => {
-     logger.info(colors.green('✅ Redis (BullMQ) connected successfully'));
-});
-
 redisConnection.on('error', (err: any) => {
      const msg = err?.message || '';
      if (msg.includes('NOAUTH') || msg.includes('WRONGPASS') || msg.includes('AUTH')) {
@@ -37,17 +33,16 @@ redisConnection.on('error', (err: any) => {
                lastAuthErrorLoggedAt = now;
                errorLogger.error(
                     colors.red(
-                         '❌ Redis (BullMQ) authentication error: check REDIS_URL or REDIS_PASSWORD in .env ->',
+                         `❌ Redis (BullMQ) authentication error: ${msg} (check REDIS_URL or REDIS_PASSWORD in .env)`,
                     ),
-                    msg,
                );
           }
           return;
      }
-     errorLogger.error(colors.red('❌ Redis (BullMQ) connection error:'), err);
+     errorLogger.error(colors.red(`❌ Redis (BullMQ) connection error: ${msg || err}`));
 });
 
 redisConnection.on('ready', () => {
      lastAuthErrorLoggedAt = 0;
-     logger.info(colors.bgYellow('🚀 Redis (BullMQ) is ready'));
+     logger.info(colors.green('✅ Redis (BullMQ) connected & ready'));
 });

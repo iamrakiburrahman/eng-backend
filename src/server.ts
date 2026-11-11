@@ -23,16 +23,25 @@ async function bootstrap() {
     const port =
       typeof config.port === "number" ? config.port : Number(config.port);
     const ipAddress = (config.ip_address as string) || "0.0.0.0";
-    server = app.listen(port, ipAddress, () => {
-      logger.info(
-        colors.yellow(
-          `♻️  Application listening on http://${ipAddress}:${port}`,
-        ),
-      );
+    await new Promise<void>((resolve, reject) => {
+      server = app.listen(port, ipAddress, () => {
+        logger.info(
+          colors.yellow(
+            `♻️  Application listening on http://${ipAddress}:${port}`,
+          ),
+        );
+        resolve();
+      });
+      server.once("error", reject);
     });
 
     // 3. Initialize Socket Server
     await initSocketServer(server);
+
+    // 4. Signal PM2 cluster readiness for zero-downtime start/reload
+    if (typeof process.send === "function") {
+      process.send("ready");
+    }
   } catch (error) {
     errorLogger.error(colors.red("💥 Server bootstrap failed:"), error);
     process.exit(1);

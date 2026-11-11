@@ -1,7 +1,8 @@
 import colors from "colors";
 import { logger } from "../shared/logger";
+import { getRedisClient, isRedisReady } from "../DB/redis";
 
-// In-memory cache for fast deduplication with automatic TTL expiration
+// Local fallback cache for deduplication when Redis is unavailable
 const dedupCache = new Map<string, number>();
 
 // Cleanup expired keys every 60 seconds
@@ -16,11 +17,37 @@ setInterval(() => {
 
 /**
  * Check if a notification is a duplicate within a given time-to-live window.
- * Returns true if this is a duplicate (should be dropped).
- * Returns false if it is new (registers it).
+ * Uses Redis atomic SET NX EX in cluster mode so deduplication works across all workers,
+ * falling back to process-local memory if Redis is unavailable.
  */
-export function isDuplicateNotification(key: string, ttlSeconds: number = 60): boolean {
+export async function isDuplicateNotification(
+  key: string,
+  ttlSeconds: number = 60,
+): Promise<boolean> {
   if (!key) return false;
+
+  const safeTtl = Math.max(1, Math.floor(ttlSeconds));
+  const redisClient = getRedisClient();
+
+  if (redisClient && isRedisReady()) {
+    try {
+      const acquired = await redisClient.set(`notif_dedup:${key}`, "1", {
+        NX: true,
+        EX: safeTtl,
+      });
+      if (acquired === null) {
+        logger.warn(
+          colors.yellow(
+            `[Notification Deduplication] Dropped duplicate notification trigger for key: "${key}" (cooldown active)`
+          )
+        );
+        return true;
+      }
+      return false;
+    } catch {
+      // Fallback to local memory cache on transient Redis error
+    }
+  }
 
   const now = Date.now();
   const existingExpiresAt = dedupCache.get(key);
@@ -35,16 +62,24 @@ export function isDuplicateNotification(key: string, ttlSeconds: number = 60): b
   }
 
   // Record this key with expiration
-  dedupCache.set(key, now + ttlSeconds * 1000);
+  dedupCache.set(key, now + safeTtl * 1000);
   return false; // Not a duplicate
 }
 
 /**
  * Clear a key from deduplication cache (e.g. if queueing failed)
  */
-export function clearDuplicateNotification(key: string): void {
-  if (key) {
-    dedupCache.delete(key);
+export async function clearDuplicateNotification(key: string): Promise<void> {
+  if (!key) return;
+
+  dedupCache.delete(key);
+  const redisClient = getRedisClient();
+  if (redisClient && isRedisReady()) {
+    try {
+      await redisClient.del(`notif_dedup:${key}`);
+    } catch {
+      // Ignore cleanup error
+    }
   }
 }
 
