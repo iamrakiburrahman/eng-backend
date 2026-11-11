@@ -4,12 +4,12 @@ services:
           container_name: redis
           restart: unless-stopped
           ports:
-               - '6379:6379'
-          command: redis-server --appendonly yes
+               - '127.0.0.1:6379:6379'
+          command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
           volumes:
                - redis_data:/data
           healthcheck:
-               test: ['CMD', 'redis-cli', '--raw', 'incr', 'ping']
+               test: ['CMD-SHELL', 'REDISCLI_AUTH="${REDIS_PASSWORD:-redis123}" redis-cli --raw incr ping']
                interval: 10s
                timeout: 5s
                retries: 5
