@@ -13,6 +13,10 @@ import { PlayerDashboardService } from "../playerDashboard/playerDashboard.servi
 import { isPremiumPlayerPackage } from "../../../helpers/packageHelper";
 import { getBatchPlayerStatsSummary } from "../../../helpers/playerStatsHelper";
 import { PlayerEconomy } from "../coinAndBudget/playerEconomySchema.model";
+import pick, {
+  USER_ADMIN_EDITABLE_FIELDS,
+  USER_SELF_EDITABLE_FIELDS,
+} from "../../../shared/pick";
 
 const checkCanViewOtherPlayers = async (
   user?: JwtPayload | null,
@@ -46,36 +50,32 @@ const createPlayerByParentToDB = async (parentId: string, payload: any) => {
     throw new ApiError(StatusCodes.NOT_FOUND, "Parent account not found");
   }
 
-  // Calculate market value dynamically based on PlayerEconomy conversionRate
-  const pe = await PlayerEconomy.findOne();
-  const rate = pe?.conversionRate ?? 10;
-  const coins = Number(payload.engCoine) || 0;
-  const marketValue = payload.marketValue !== undefined ? Number(payload.marketValue) : coins * rate;
+  const safeInput = pick(payload, USER_SELF_EDITABLE_FIELDS);
 
   const parseBool = (val: any) =>
     val === true || val === "true" || val === 1 || val === "1";
 
   let teamId: Types.ObjectId | null = null;
-  if (payload.selectTeam && Types.ObjectId.isValid(payload.selectTeam)) {
-    teamId = new Types.ObjectId(payload.selectTeam);
+  if (safeInput.selectTeam && Types.ObjectId.isValid(safeInput.selectTeam)) {
+    teamId = new Types.ObjectId(safeInput.selectTeam);
   }
   const playerData: any = {
-    ...payload,
+    ...safeInput,
     parentId: new Types.ObjectId(parentId),
     role: parentUser.role || USER_ROLES.PLAYER,
     status: "PENDING",
     verified: true,
-    engCoine: coins,
-    marketValue: marketValue,
-    emergencyEmail: payload.emergencyEmail || payload.email || "",
+    engCoine: 0,
+    marketValue: 0,
+    emergencyEmail: safeInput.emergencyEmail || payload.email || "",
     emergencyPhone:
-      payload.emergencyPhone || payload.phone || payload.phoneNumber || "",
-    isDevelopmentPlayer: parseBool(payload.isDevelopmentPlayer),
-    playForAcademy: parseBool(payload.playForAcademy),
-    mediaConsent: parseBool(payload.mediaConsent),
+      safeInput.emergencyPhone || safeInput.phone || payload.phoneNumber || "",
+    isDevelopmentPlayer: parseBool(safeInput.isDevelopmentPlayer),
+    playForAcademy: parseBool(safeInput.playForAcademy),
+    mediaConsent: parseBool(safeInput.mediaConsent),
     selectTeam: teamId,
-    dateOfBirth: payload.dateOfBirth
-      ? new Date(payload.dateOfBirth)
+    dateOfBirth: safeInput.dateOfBirth
+      ? new Date(safeInput.dateOfBirth)
       : undefined,
     password: null, // PLAYER HAS NO LOGIN
   };
@@ -251,23 +251,22 @@ const updatePlayerByParentToDB = async (
     );
   }
 
-  // Recalculate market value if engCoine is updated and marketValue not explicitly provided
-  if (payload.engCoine !== undefined && payload.marketValue === undefined) {
-    const pe = await PlayerEconomy.findOne();
-    const rate = pe?.conversionRate ?? 10;
-    payload.marketValue = Number(payload.engCoine) * rate;
-  }
+  const safePayload: any = pick(payload, USER_SELF_EDITABLE_FIELDS);
 
   // If player was REJECTED, resubmitting updates resets status to PENDING for admin review
   if (player.status === "REJECTED") {
-    payload.status = "PENDING";
-    payload.rejectionReason = "";
+    safePayload.status = "PENDING";
+    safePayload.rejectionReason = "";
   }
 
-  const updatedPlayer = await User.findByIdAndUpdate(playerId, payload, {
-    new: true,
-    runValidators: true,
-  }).populate("selectTeam", "teamName shortName teamLogo");
+  const updatedPlayer = await User.findByIdAndUpdate(
+    playerId,
+    { $set: safePayload },
+    {
+      new: true,
+      runValidators: true,
+    },
+  ).populate("selectTeam", "teamName shortName teamLogo");
 
   return updatedPlayer;
 };
@@ -866,16 +865,22 @@ const updatePlayerByAdminToDB = async (id: string, payload: Partial<any>) => {
     throw new ApiError(StatusCodes.NOT_FOUND, "Player not found");
   }
 
-  if (payload.engCoine !== undefined && payload.marketValue === undefined) {
+  const safePayload: any = pick(payload, USER_ADMIN_EDITABLE_FIELDS);
+
+  if (safePayload.engCoine !== undefined && safePayload.marketValue === undefined) {
     const pe = await PlayerEconomy.findOne();
     const rate = pe?.conversionRate ?? 10;
-    payload.marketValue = Number(payload.engCoine) * rate;
+    safePayload.marketValue = Number(safePayload.engCoine) * rate;
   }
 
-  const result = await User.findByIdAndUpdate(id, payload, {
-    new: true,
-    runValidators: true,
-  }).populate({
+  const result = await User.findByIdAndUpdate(
+    id,
+    { $set: safePayload },
+    {
+      new: true,
+      runValidators: true,
+    },
+  ).populate({
     path: "selectTeam",
     select: "teamName shortName teamLogo",
   });

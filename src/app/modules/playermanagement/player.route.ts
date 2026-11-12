@@ -66,21 +66,21 @@ router.delete(
 // 6. GET PENDING PLAYERS FOR ADMIN REVIEW
 router.get(
   "/admin/pending",
-  auth(...ROLE_GROUPS.All),
+  auth(...ROLE_GROUPS.ADMINS),
   PlayerController.getPendingPlayersForAdmin
 );
 
 // 7. APPROVE PLAYER BY ADMIN
 router.patch(
   "/admin/:id/approve",
-  auth(...ROLE_GROUPS.All),
+  auth(...ROLE_GROUPS.ADMINS),
   PlayerController.approvePlayerByAdmin
 );
 
 // 8. REJECT PLAYER BY ADMIN
 router.patch(
   "/admin/:id/reject",
-  auth(...ROLE_GROUPS.All),
+  auth(...ROLE_GROUPS.ADMINS),
   PlayerController.rejectPlayerByAdmin
 );
 
@@ -98,7 +98,7 @@ router.get("/overview", auth(false), PlayerController.getPlayerOverview);
 // UPDATE PLAYER DATA (ADMIN & SUPER_ADMIN)
 router.patch(
   "/:id",
-  auth(...ROLE_GROUPS.All),
+  auth(...ROLE_GROUPS.ADMINS),
   fileUploadHandler(),
   PlayerController.updatePlayerByAdmin
 );
@@ -113,7 +113,7 @@ router.patch(
 // DELETE PLAYER (ADMIN & SUPER_ADMIN)
 router.delete(
   "/:id",
-  auth(...ROLE_GROUPS.All),
+  auth(...ROLE_GROUPS.ADMINS),
   PlayerController.deletePlayerByAdmin
 );
 

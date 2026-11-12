@@ -18,6 +18,7 @@ import { isPremiumPlayerPackage, isUserPremiumPlayer } from "../../../helpers/pa
 import { recordCoinTransaction } from "../../../helpers/coinLedgerHelper";
 import { COIN_TRANSACTION_CATEGORY } from "../coinTransaction/coinTransaction.interface";
 import { carryForwardPlayerStats } from "../../../helpers/playerTransferStatsHelper";
+import pick, { USER_SELF_EDITABLE_FIELDS } from "../../../shared/pick";
 
 const ALLOWED_PUBLIC_SIGNUP_ROLES: USER_ROLES[] = [
   USER_ROLES.PLAYER,
@@ -266,65 +267,56 @@ const updateChieldInfoToDB = async (id: string, payload: any) => {
     throw new ApiError(StatusCodes.NOT_FOUND, "Child user not found");
   }
 
-  // Clean up empty string / invalid ObjectId fields like selectTeam or parentId
-  if ("selectTeam" in payload) {
-    if (
-      !payload.selectTeam ||
-      payload.selectTeam === "" ||
-      payload.selectTeam === "null" ||
-      !Types.ObjectId.isValid(payload.selectTeam)
-    ) {
-      payload.selectTeam = null;
-    }
-  }
+  const safePayload: any = pick(payload, USER_SELF_EDITABLE_FIELDS);
 
-  if ("parentId" in payload) {
+  // Clean up empty string / invalid ObjectId fields like selectTeam
+  if ("selectTeam" in safePayload) {
     if (
-      !payload.parentId ||
-      payload.parentId === "" ||
-      payload.parentId === "null" ||
-      !Types.ObjectId.isValid(payload.parentId)
+      !safePayload.selectTeam ||
+      safePayload.selectTeam === "" ||
+      safePayload.selectTeam === "null" ||
+      !Types.ObjectId.isValid(safePayload.selectTeam)
     ) {
-      delete payload.parentId;
+      safePayload.selectTeam = null;
     }
   }
 
   // If document files were uploaded in this request:
-  // If payload.document is empty (no new file uploaded), keep existing documents.
+  // If safePayload.document is empty (no new file uploaded), keep existing documents.
   // If new files were uploaded, replace old documents and unlink old files from disk.
-  if (Array.isArray(payload.document)) {
-    if (payload.document.length === 0) {
-      delete payload.document;
+  if (Array.isArray(safePayload.document)) {
+    if (safePayload.document.length === 0) {
+      delete safePayload.document;
     } else if (
-      payload.document.length > 0 &&
+      safePayload.document.length > 0 &&
       Array.isArray(isExistUser.document)
     ) {
       isExistUser.document.forEach((oldDoc: string) => {
-        if (oldDoc && !payload.document.includes(oldDoc)) {
+        if (oldDoc && !safePayload.document.includes(oldDoc)) {
           unlinkFile(oldDoc);
         }
       });
     }
   }
 
-  if (payload.profile && isExistUser.profile) {
+  if (safePayload.profile && isExistUser.profile) {
     unlinkFile(isExistUser.profile);
   }
 
   // If user status is REJECTED, change back to PENDING and clear rejectionReason
   if (isExistUser.status === "REJECTED") {
-    payload.status = "PENDING";
-    payload.rejectionReason = "";
+    safePayload.status = "PENDING";
+    safePayload.rejectionReason = "";
   }
 
   const result = await User.findByIdAndUpdate(
     id,
-    { $set: payload },
+    { $set: safePayload },
     { new: true, runValidators: true },
   );
 
-  if (payload.selectTeam) {
-    await carryForwardPlayerStats(id, payload.selectTeam);
+  if (safePayload.selectTeam) {
+    await carryForwardPlayerStats(id, safePayload.selectTeam);
   }
 
   return result;
@@ -340,20 +332,20 @@ const updateProfileToDB = async (
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  //unlink file here
-  if (payload.profile) {
-    unlinkFile(isExistUser.profile);
-  }
-  if (!payload.profile) {
-    delete payload.profile;
-  }
-  // if (Array.isArray(payload.document)) {
-  //   payload.document = [...isExistUser.document, ...payload.document];
-  // }
+  const safePayload: any = pick(payload as any, USER_SELF_EDITABLE_FIELDS);
 
-  const updateDoc = await User.findOneAndUpdate({ _id: _id }, payload, {
-    new: true,
-  });
+  //unlink file here
+  if (safePayload.profile) {
+    unlinkFile(isExistUser.profile);
+  } else {
+    delete safePayload.profile;
+  }
+
+  const updateDoc = await User.findOneAndUpdate(
+    { _id: _id },
+    { $set: safePayload },
+    { new: true, runValidators: true },
+  );
   return updateDoc;
 };
 
@@ -362,27 +354,30 @@ const createPlayerToDB = async (payload: any) => {
   const user = await User.findById(payload.userId);
   if (!user) throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
 
-  if (
-    user.role === USER_ROLES.OTHER_CLUBS ||
-    payload.role === USER_ROLES.OTHER_CLUBS
-  ) {
-    payload.marketValue = 0;
+  const safePayload: any = pick(payload, USER_SELF_EDITABLE_FIELDS);
+
+  if (user.role === USER_ROLES.OTHER_CLUBS) {
+    safePayload.marketValue = 0;
   } else {
     const pe = await PlayerEconomy.findOne();
-    if (payload.marketValue === undefined) {
-      payload.marketValue = pe ? pe.startingMarketValue : 100000;
+    if (!user.marketValue) {
+      safePayload.marketValue = pe ? pe.startingMarketValue : 100000;
     }
-    if (payload.engCoine === undefined) {
+    if (!user.engCoine) {
       const rate = Number(pe?.conversionRate) || 10;
       const startMV = Number(pe?.startingMarketValue) || 100000;
-      payload.engCoine = Number(pe?.startingCoins) || (rate > 0 ? Math.round(startMV / rate) : 10000);
+      safePayload.engCoine = Number(pe?.startingCoins) || (rate > 0 ? Math.round(startMV / rate) : 10000);
     }
   }
 
-  const result = await User.findOneAndUpdate({ _id: payload.userId }, payload, {
-    new: true,
-    runValidators: true,
-  });
+  const result = await User.findOneAndUpdate(
+    { _id: payload.userId },
+    { $set: safePayload },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
 
   if (!result) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create player");
@@ -411,26 +406,28 @@ const updatePlayerByUserId = async (userId: string, payload: any) => {
     throw new ApiError(StatusCodes.NOT_FOUND, "Player not found");
   }
 
-  if ("selectTeam" in payload) {
+  const safePayload: any = pick(payload, USER_SELF_EDITABLE_FIELDS);
+
+  if ("selectTeam" in safePayload) {
     if (
-      !payload.selectTeam ||
-      payload.selectTeam === "" ||
-      payload.selectTeam === "null" ||
-      !Types.ObjectId.isValid(payload.selectTeam)
+      !safePayload.selectTeam ||
+      safePayload.selectTeam === "" ||
+      safePayload.selectTeam === "null" ||
+      !Types.ObjectId.isValid(safePayload.selectTeam)
     ) {
-      payload.selectTeam = null;
+      safePayload.selectTeam = null;
     }
   }
 
   // If document files were uploaded in this request:
-  // If payload.document is empty (no new file uploaded), keep existing documents.
+  // If safePayload.document is empty (no new file uploaded), keep existing documents.
   // If new files were uploaded, replace old documents and unlink old files from disk.
-  if (Array.isArray(payload.document)) {
-    if (payload.document.length === 0) {
-      delete payload.document;
-    } else if (payload.document.length > 0 && Array.isArray(isExist.document)) {
+  if (Array.isArray(safePayload.document)) {
+    if (safePayload.document.length === 0) {
+      delete safePayload.document;
+    } else if (safePayload.document.length > 0 && Array.isArray(isExist.document)) {
       isExist.document.forEach((oldDoc: string) => {
-        if (oldDoc && !payload.document.includes(oldDoc)) {
+        if (oldDoc && !safePayload.document.includes(oldDoc)) {
           unlinkFile(oldDoc);
         }
       });
@@ -439,17 +436,21 @@ const updatePlayerByUserId = async (userId: string, payload: any) => {
 
   // If user status is REJECTED, change back to PENDING and clear rejectionReason
   if (isExist.status === "REJECTED") {
-    payload.status = "PENDING";
-    payload.rejectionReason = "";
+    safePayload.status = "PENDING";
+    safePayload.rejectionReason = "";
   }
 
-  const result = await User.findByIdAndUpdate(userId, payload, {
-    new: true,
-    runValidators: true,
-  });
+  const result = await User.findByIdAndUpdate(
+    userId,
+    { $set: safePayload },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
 
-  if (payload.selectTeam) {
-    await carryForwardPlayerStats(userId, payload.selectTeam);
+  if (safePayload.selectTeam) {
+    await carryForwardPlayerStats(userId, safePayload.selectTeam);
   }
 
   return result;

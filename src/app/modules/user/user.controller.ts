@@ -4,6 +4,7 @@ import { UserService } from './user.service';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import ApiError from '../../../errors/ApiErrors';
+import pick, { USER_SELF_EDITABLE_FIELDS } from '../../../shared/pick';
 
 // register user
 const createUser = catchAsync( async (req: Request, res: Response, next: NextFunction) => {
@@ -110,18 +111,30 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
         profile = `/images/${req.files.image[0].filename}`;
     }
 
-    // ✅ parse JSON string
-    let parsedData = {};
-    if (req.body.data) {
-        parsedData = JSON.parse(req.body.data);
+    // ✅ parse JSON string safely & enforce editable field allowlist
+    let parsedData: any = {};
+    if (req.body?.data) {
+        try {
+            parsedData = typeof req.body.data === 'string'
+                ? JSON.parse(req.body.data)
+                : req.body.data;
+        } catch {
+            throw new ApiError(400, "Invalid JSON format in request body");
+        }
+    } else if (req.body && typeof req.body === 'object') {
+        parsedData = req.body;
     }
 
-    const data = {
-        profile,
-        ...parsedData,
-    };
+    if (parsedData?.phoneNumber && !parsedData?.phone) {
+        parsedData.phone = parsedData.phoneNumber;
+    }
 
-    const result = await UserService.updateProfileToDB(user, data);
+    const safeData: any = pick(parsedData, USER_SELF_EDITABLE_FIELDS);
+    if (profile) {
+        safeData.profile = profile;
+    }
+
+    const result = await UserService.updateProfileToDB(user, safeData);
 
     sendResponse(res, {
         success: true,
@@ -212,11 +225,16 @@ const createPlayer = catchAsync(async (req: Request, res: Response) => {
       }
     }
 
-    // 🚀 FINAL PAYLOAD
-    const data = {
+    if (parsedData?.phoneNumber && !parsedData?.phone) {
+        parsedData.phone = parsedData.phoneNumber;
+    }
+
+    // 🚀 FINAL PAYLOAD (allowlisted fields only)
+    const safeParsed = pick(parsedData, USER_SELF_EDITABLE_FIELDS);
+    const data: any = {
         userId,
-        document: documentFiles, // 👈 BOTH IMAGE + DOC IN ONE FIELD
-        ...parsedData,
+        ...safeParsed,
+        document: documentFiles.length > 0 ? documentFiles : safeParsed.document || [],
     };
 
     const result = await UserService.createPlayerToDB(data);
@@ -268,10 +286,14 @@ const updateChieldInfo = catchAsync(async (req: Request, res: Response) => {
     );
   }
 
-  // ✅ UPDATE DATA
+  if (parsedData?.phoneNumber && !parsedData?.phone) {
+    parsedData.phone = parsedData.phoneNumber;
+  }
+
+  // ✅ UPDATE DATA (allowlisted fields only)
   const updateData: any = {
-    ...parsedData,
-    document: documentFiles
+    ...pick(parsedData, USER_SELF_EDITABLE_FIELDS),
+    document: documentFiles,
   };
 
   const childId = req.params.childId as string;
@@ -324,9 +346,13 @@ const updatePlayer = catchAsync(async (req: Request, res: Response) => {
     );
   }
 
-  // ✅ UPDATE DATA
+  if (parsedData?.phoneNumber && !parsedData?.phone) {
+    parsedData.phone = parsedData.phoneNumber;
+  }
+
+  // ✅ UPDATE DATA (allowlisted fields only)
   const updateData: any = {
-    ...parsedData,
+    ...pick(parsedData, USER_SELF_EDITABLE_FIELDS),
   };
 
   // ✅ DOCUMENT ADD
