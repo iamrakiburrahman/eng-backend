@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { StatusCodes } from 'http-status-codes';
 import ApiError from '../../../errors/ApiErrors';
 import { USER_ROLES } from '../../../enums/user';
@@ -5,6 +6,18 @@ import { Subscription } from '../subscription/subscription.model';
 import { PlayerStats } from './playerStats.model';
 import { JwtPayload } from 'jsonwebtoken';
 import { getPlayerStatsSummary } from '../../../helpers/playerStatsHelper';
+import pick from '../../../shared/pick';
+
+const EDITABLE_PLAYER_STAT_FIELDS = [
+  'goals',
+  'assists',
+  'cleanSheets',
+  'playerOfTheDay',
+  'totalMatches',
+  'matchesPlayed',
+  'yellowCards',
+  'redCards',
+] as const;
 
 const checkCanViewOtherPlayerStats = async (user?: JwtPayload | null): Promise<boolean> => {
   if (!user || user.role !== USER_ROLES.PLAYER) return true;
@@ -91,16 +104,30 @@ const updatePlayerStatsFromDB = async (
   playerId: string,
   payload: any
 ) => {
+  if (!Types.ObjectId.isValid(playerId)) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid player ID');
+  }
+
   const existing = await PlayerStats.findOne({ player: playerId });
 
   if (!existing) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Player stats not found');
   }
 
+  const rawPicked = pick(payload, EDITABLE_PLAYER_STAT_FIELDS);
+  const safePayload: Record<string, number> = {};
+  for (const [key, val] of Object.entries(rawPicked)) {
+    const num = Number(val);
+    if (!Number.isFinite(num) || num < 0) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, `${key} must be a non-negative number`);
+    }
+    safePayload[key] = num;
+  }
+
   return await PlayerStats.findOneAndUpdate(
     { player: playerId },
     {
-      ...payload,
+      $set: safePayload,
     },
     {
       new: true,

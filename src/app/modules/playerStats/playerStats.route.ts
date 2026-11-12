@@ -1,5 +1,6 @@
 import express from 'express';
 import auth from '../../middlewares/auth';
+import { ROLE_GROUPS } from '../../../enums/user';
 import { PlayerStatsController } from './playerStats.controller';
 
 const router = express.Router();
@@ -11,6 +12,6 @@ router.route('/').get(auth(false), PlayerStatsController.getAllPlayerStats);
 router.route('/:playerId').get(auth(false), PlayerStatsController.getSinglePlayerStats);
 
 // ADMIN UPDATE
-router.route('/:playerId').patch(PlayerStatsController.updatePlayerStats);
+router.route('/:playerId').patch(auth(...ROLE_GROUPS.All), PlayerStatsController.updatePlayerStats);
 
 export default router;

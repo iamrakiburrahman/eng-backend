@@ -931,22 +931,57 @@ const updateVotingPollInDB = async (
     throw new ApiError(StatusCodes.NOT_FOUND, 'Voting poll not found.');
   }
 
-  if (payload.startDate && payload.endDate) {
-    const start = new Date(payload.startDate);
-    const end = new Date(payload.endDate);
+  const updatePayload: Partial<IPlayerVoting> & Record<string, unknown> = { ...payload };
+
+  // Strip blank strings from FormData so partial updates do not fail enum/date/ObjectId validation
+  const nonEmptyFields = [
+    'title',
+    'votingType',
+    'league',
+    'ageGroup',
+    'month',
+    'weekNumber',
+    'startDate',
+    'endDate',
+    'status',
+    'banner',
+  ];
+  for (const field of nonEmptyFields) {
+    const val = updatePayload[field];
+    if (val === undefined || val === null || (typeof val === 'string' && val.trim() === '')) {
+      delete updatePayload[field];
+    }
+  }
+
+  if (updatePayload.weekNumber !== undefined) {
+    const parsedWeek = Number(updatePayload.weekNumber);
+    if (!Number.isFinite(parsedWeek)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'weekNumber must be a valid number.');
+    }
+    updatePayload.weekNumber = parsedWeek;
+  }
+
+  const effectiveStart = updatePayload.startDate ?? existingPoll.startDate;
+  const effectiveEnd = updatePayload.endDate ?? existingPoll.endDate;
+  if (effectiveStart && effectiveEnd) {
+    const start = new Date(effectiveStart as string | Date);
+    const end = new Date(effectiveEnd as string | Date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid startDate or endDate.');
+    }
     if (start >= end) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'startDate must be before endDate.');
     }
   }
 
   // If nominees are updated, preserve existing vote counts for matched players
-  if (Array.isArray(payload.nominees) && payload.nominees.length >= 2) {
+  if (Array.isArray(updatePayload.nominees) && updatePayload.nominees.length >= 2) {
     const playerVotesMap = new Map<string, number>();
     existingPoll.nominees.forEach((n) => {
       playerVotesMap.set(n.player.toString(), n.votesCount || 0);
     });
 
-    payload.nominees = payload.nominees.map((n) => ({
+    updatePayload.nominees = updatePayload.nominees.map((n) => ({
       player: new Types.ObjectId(n.player),
       team: n.team ? new Types.ObjectId(n.team) : undefined,
       statsHighlight: n.statsHighlight || '',
@@ -954,10 +989,14 @@ const updateVotingPollInDB = async (
     }));
   }
 
-  const result = await PlayerVoting.findByIdAndUpdate(id, payload, {
-    new: true,
-    runValidators: true,
-  })
+  const result = await PlayerVoting.findByIdAndUpdate(
+    id,
+    { $set: updatePayload },
+    {
+      new: true,
+      runValidators: true,
+    }
+  )
     .populate('league', 'leagueName season ageGroup')
     .populate('nominees.player', 'firstName lastName profile userName position')
     .populate('nominees.team', 'teamName logo')
