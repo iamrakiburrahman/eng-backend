@@ -19,29 +19,79 @@ import { recordCoinTransaction } from "../../../helpers/coinLedgerHelper";
 import { COIN_TRANSACTION_CATEGORY } from "../coinTransaction/coinTransaction.interface";
 import { carryForwardPlayerStats } from "../../../helpers/playerTransferStatsHelper";
 
+const ALLOWED_PUBLIC_SIGNUP_ROLES: USER_ROLES[] = [
+  USER_ROLES.PLAYER,
+  USER_ROLES.MANAGER,
+  USER_ROLES.REFEREE,
+  USER_ROLES.OTHER_CLUBS,
+  USER_ROLES.TOURNAMENT_PLAYER,
+];
+
 const createAdminToDB = async (payload: any): Promise<IUser> => {
+  const requestedRole = String(payload?.role || USER_ROLES.ADMIN)
+    .trim()
+    .toUpperCase();
+  if (requestedRole !== USER_ROLES.ADMIN) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      "Only ADMIN accounts can be created via this endpoint",
+    );
+  }
+
   // check admin is exist or not;
   const isExistAdmin = await User.findOne({ email: payload.email });
   if (isExistAdmin) {
     throw new ApiError(StatusCodes.CONFLICT, "This Email already taken");
   }
 
-  // create admin to db
-  const createAdmin = await User.create(payload);
+  // create admin to db using explicit allowlisted fields
+  const createAdmin = await User.create({
+    email: payload.email,
+    password: payload.password,
+    firstName: payload.firstName,
+    lastName: payload.lastName,
+    userName: payload.userName,
+    role: USER_ROLES.ADMIN,
+    verified: true,
+    status: "APPROVED",
+  });
   if (!createAdmin) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create Admin");
-  } else {
-    await User.findByIdAndUpdate(
-      { _id: createAdmin?._id },
-      { verified: true },
-      { new: true },
-    );
   }
 
-  return createAdmin;
+  const sanitizedAdmin = createAdmin.toObject();
+  delete (sanitizedAdmin as any).password;
+  return sanitizedAdmin as any;
 };
 
 const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
+  const requestedRole = (payload.role
+    ? String(payload.role).trim().toUpperCase()
+    : USER_ROLES.PLAYER) as USER_ROLES;
+
+  if (!ALLOWED_PUBLIC_SIGNUP_ROLES.includes(requestedRole)) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      "You are not allowed to register with this role",
+    );
+  }
+
+  // Strip privileged system fields on public signup
+  delete (payload as any).verified;
+  delete (payload as any).engCoine;
+  delete (payload as any).marketValue;
+  delete (payload as any).rewardPoint;
+  delete (payload as any).isSubscribed;
+  delete (payload as any).hasAccess;
+  delete (payload as any).permissions;
+  delete (payload as any).authentication;
+  delete (payload as any).accountInformation;
+  delete (payload as any).blueTick;
+  delete (payload as any).parentId;
+
+  payload.role = requestedRole;
+  payload.verified = false;
+
   if (payload.role === USER_ROLES.OTHER_CLUBS) {
     payload.marketValue = 0;
   }
@@ -54,7 +104,7 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
     USER_ROLES.OTHER_CLUBS,
   ];
 
-  if (payload.role && rolesRequiringApproval.includes(payload.role as any)) {
+  if (rolesRequiringApproval.includes(payload.role as any)) {
     payload.status = "PENDING";
   } else {
     payload.status = "APPROVED";

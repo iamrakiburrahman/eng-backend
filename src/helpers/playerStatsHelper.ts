@@ -252,6 +252,11 @@ export const getBatchPlayerStatsSummary = async (
   options?: {
     matchFilter?: any;
     matchEvaluationFilter?: any;
+    matchSelectionFilter?: any;
+    matchReviewFilter?: any;
+    validMatchFilter?: any;
+    includeManualStats?: boolean;
+    manualStatsLeagueIds?: (string | Types.ObjectId)[];
   }
 ): Promise<Map<string, IPlayerStatsDetails>> => {
   const result = new Map<string, IPlayerStatsDetails>();
@@ -281,6 +286,15 @@ export const getBatchPlayerStatsSummary = async (
       matchesPlayed: 0,
     });
   });
+
+  const includeManualStats = options?.includeManualStats !== false;
+  const manualLeagueObjectIds = (options?.manualStatsLeagueIds || [])
+    .filter((id) => Types.ObjectId.isValid(id as any))
+    .map((id) => new mongoose.Types.ObjectId(id as any));
+  const playerStatsFilter: any = { player: { $in: objectIds } };
+  if (manualLeagueObjectIds.length > 0) {
+    playerStatsFilter.league = { $in: manualLeagueObjectIds };
+  }
 
   const [
     matchResults,
@@ -358,8 +372,13 @@ export const getBatchPlayerStatsSummary = async (
         },
       },
     ]),
-    PlayerStats.find({ player: { $in: objectIds } }).lean(),
+    includeManualStats
+      ? PlayerStats.find(playerStatsFilter).lean()
+      : Promise.resolve([]),
     MatchPlayerSelection.aggregate([
+      ...(options?.matchSelectionFilter
+        ? [{ $match: options.matchSelectionFilter }]
+        : []),
       { $unwind: "$players" },
       { $match: { "players.player": { $in: objectIds } } },
       { $group: { _id: { player: "$players.player", match: "$match" } } },
@@ -385,7 +404,12 @@ export const getBatchPlayerStatsSummary = async (
       { $group: { _id: { player: "$players", match: "$match" } } },
     ]),
     Match.aggregate([
-      { $match: { status: { $ne: "cancelled" } } },
+      {
+        $match: {
+          status: { $ne: "cancelled" },
+          ...(options?.matchReviewFilter || {}),
+        },
+      },
       { $unwind: "$matchReview" },
       { $match: { "matchReview.player": { $in: objectIds } } },
       { $group: { _id: { player: "$matchReview.player", match: "$_id" } } },
@@ -458,6 +482,7 @@ export const getBatchPlayerStatsSummary = async (
       ? await Match.find({
           _id: { $in: validMatchObjectIds },
           status: { $ne: "cancelled" },
+          ...(options?.validMatchFilter || {}),
         }).distinct("_id")
       : [];
 

@@ -1,13 +1,28 @@
 import { z } from 'zod';
+import { USER_ROLES } from '../../../enums/user';
+
+const PUBLIC_SIGNUP_ROLES = [
+  USER_ROLES.PLAYER,
+  USER_ROLES.MANAGER,
+  USER_ROLES.REFEREE,
+  USER_ROLES.OTHER_CLUBS,
+  USER_ROLES.TOURNAMENT_PLAYER,
+] as const;
 
 const createAdminZodSchema = z.object({
   body: z.object({
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    userName: z.string().optional(),
     email: z
       .string()
       .min(1, "Email is required")
       .email("Invalid email address"),
-    password: z.string().min(1, "Password is required"),
-    role: z.string().min(1, "Role is required"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    role: z.preprocess(
+      (v) => (typeof v === "string" ? v.trim().toUpperCase() : v),
+      z.enum([USER_ROLES.ADMIN]).optional().default(USER_ROLES.ADMIN),
+    ),
   }),
 });
 const createUserZodSchema = z.object({
@@ -21,7 +36,12 @@ const createUserZodSchema = z.object({
     password: z.string().min(1, "Password is required"),
     phone: z.string().optional(),
     phoneNumber: z.string().optional(),
-    role: z.string().optional(),
+    role: z
+      .preprocess(
+        (v) => (typeof v === "string" ? v.trim().toUpperCase() : v),
+        z.enum(PUBLIC_SIGNUP_ROLES),
+      )
+      .optional(),
   }),
 });
 

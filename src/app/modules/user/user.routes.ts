@@ -11,6 +11,7 @@ router.get("/profile", auth(...ROLE_GROUPS.All), UserController.getUserProfile);
 
 router.post(
   "/create-admin",
+  auth(USER_ROLES.SUPER_ADMIN),
   validateRequest(UserValidation.createAdminZodSchema),
   UserController.createAdmin,
 );

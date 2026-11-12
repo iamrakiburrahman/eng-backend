@@ -8,9 +8,25 @@ import ApiError from '../../../errors/ApiErrors';
 // register user
 const createUser = catchAsync( async (req: Request, res: Response, next: NextFunction) => {
     const rawData = req.body?.data ? (typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data) : req.body;
-    const userData = { ...rawData };
+    const {
+        verified: _verified,
+        status: _status,
+        engCoine: _engCoine,
+        marketValue: _marketValue,
+        rewardPoint: _rewardPoint,
+        isSubscribed: _isSubscribed,
+        hasAccess: _hasAccess,
+        permissions: _permissions,
+        authentication: _authentication,
+        accountInformation: _accountInformation,
+        blueTick: _blueTick,
+        ...safeRawData
+    } = rawData || {};
+    const userData = { ...safeRawData };
     if (!userData.role) {
         userData.role = 'PLAYER';
+    } else if (typeof userData.role === 'string') {
+        userData.role = userData.role.trim().toUpperCase();
     }
     if (userData.phoneNumber && !userData.phone) {
         userData.phone = userData.phoneNumber;
@@ -27,8 +43,15 @@ const createUser = catchAsync( async (req: Request, res: Response, next: NextFun
 
 // register admin
 const createAdmin = catchAsync( async (req: Request, res: Response, next: NextFunction) => {
-    const { ...userData } = req.body;
-    const result = await UserService.createAdminToDB(userData);
+    const { email, password, role, firstName, lastName, userName } = req.body;
+    const result = await UserService.createAdminToDB({
+        email,
+        password,
+        role,
+        firstName,
+        lastName,
+        userName,
+    });
 
     sendResponse(res, {
         success: true,

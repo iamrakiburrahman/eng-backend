@@ -10,6 +10,130 @@ import { Video } from "../video/video.model";
 import { USER_ROLES } from "../../../enums/user";
 import { getBatchPlayerStatsSummary, IPlayerStatsDetails } from "../../../helpers/playerStatsHelper";
 import { getActivePremiumSubUserIds } from "../../../helpers/packageHelper";
+import { CoinTransaction } from "../coinTransaction/coinTransaction.model";
+import { COIN_TRANSACTION_CATEGORY } from "../coinTransaction/coinTransaction.interface";
+
+const MATCH_COIN_CATEGORIES: COIN_TRANSACTION_CATEGORY[] = [
+  COIN_TRANSACTION_CATEGORY.GOAL,
+  COIN_TRANSACTION_CATEGORY.ASSIST,
+  COIN_TRANSACTION_CATEGORY.CLEAN_SHEET,
+  COIN_TRANSACTION_CATEGORY.PLAYER_OF_THE_DAY,
+  COIN_TRANSACTION_CATEGORY.MATCH_RATING,
+  COIN_TRANSACTION_CATEGORY.ATTEND_MATCH,
+  COIN_TRANSACTION_CATEGORY.PLAYING_MATCH,
+  COIN_TRANSACTION_CATEGORY.WIN_MATCH,
+  COIN_TRANSACTION_CATEGORY.DRAW_MATCH,
+  COIN_TRANSACTION_CATEGORY.YELLOW_CARD_PENALTY,
+  COIN_TRANSACTION_CATEGORY.RED_CARD_PENALTY,
+  COIN_TRANSACTION_CATEGORY.FOUL_PENALTY,
+  COIN_TRANSACTION_CATEGORY.SIN_BIN_PENALTY,
+  COIN_TRANSACTION_CATEGORY.DISRESPECT_TO_REFEREE,
+  COIN_TRANSACTION_CATEGORY.GROSS_MISCONDUCT,
+  COIN_TRANSACTION_CATEGORY.ROLLBACK,
+];
+
+const escapeRegex = (val: string) => val.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const getTimeframeConfig = (rawTf?: unknown) => {
+  const tf = (rawTf || "overall").toString().trim().toLowerCase();
+  const now = new Date();
+
+  if (tf === "this_week" || tf === "week" || tf === "weekly") {
+    const day = now.getDay() || 7;
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - day + 1);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    const startOfPrevWeek = new Date(startOfWeek);
+    startOfPrevWeek.setDate(startOfPrevWeek.getDate() - 7);
+
+    const endOfPrevWeek = new Date(startOfWeek);
+    endOfPrevWeek.setMilliseconds(-1);
+
+    return {
+      tf: "weekly",
+      isPeriodSpecific: true,
+      currentRange: { start: startOfWeek, end: endOfWeek },
+      previousRange: { start: startOfPrevWeek, end: endOfPrevWeek },
+    };
+  }
+
+  if (tf === "this_month" || tf === "month" || tf === "monthly") {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    startOfPrevMonth.setHours(0, 0, 0, 0);
+
+    const endOfPrevMonth = new Date(startOfMonth);
+    endOfPrevMonth.setMilliseconds(-1);
+
+    return {
+      tf: "monthly",
+      isPeriodSpecific: true,
+      currentRange: { start: startOfMonth, end: endOfMonth },
+      previousRange: { start: startOfPrevMonth, end: endOfPrevMonth },
+    };
+  }
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  return {
+    tf: tf === "all" ? "all" : "overall",
+    isPeriodSpecific: false,
+    currentRange: null,
+    previousRange: { endBefore: sevenDaysAgo },
+  };
+};
+
+const getBatchMatchEarnedCoins = async (
+  playerIds: mongoose.Types.ObjectId[],
+  matchIds: mongoose.Types.ObjectId[]
+): Promise<Map<string, number>> => {
+  const coinsMap = new Map<string, number>();
+  if (!playerIds.length || !matchIds.length) {
+    return coinsMap;
+  }
+
+  const rows = await CoinTransaction.aggregate([
+    {
+      $match: {
+        user: { $in: playerIds },
+        match: { $in: matchIds },
+        category: { $in: MATCH_COIN_CATEGORIES },
+      },
+    },
+    {
+      $group: {
+        _id: "$user",
+        netCoins: {
+          $sum: {
+            $cond: [
+              { $eq: ["$type", "CREDIT"] },
+              "$amount",
+              { $multiply: ["$amount", -1] },
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  rows.forEach((row: any) => {
+    const pId = row._id?.toString();
+    if (pId) {
+      coinsMap.set(pId, Math.max(0, Number(row.netCoins) || 0));
+    }
+  });
+
+  return coinsMap;
+};
 
 
 const getTopPlayerFromDB = async (leagueId: string) => {
@@ -213,7 +337,9 @@ const getPlayerSeasonStatsFromDB = async (
 const fetchLeagueSummaryStatsByTimeframe = async (
   query: Record<string, any> | undefined,
   tf: string = "overall",
-  leagueFilter: any
+  leagueFilter: any,
+  matchedLeagueIds: mongoose.Types.ObjectId[] = [],
+  hasLeagueFilter: boolean = false
 ) => {
   const queryWithTf = {
     ...query,
@@ -221,34 +347,33 @@ const fetchLeagueSummaryStatsByTimeframe = async (
     limit: 1,
   };
 
-  const now = new Date();
-  let timeFilter: any = null;
-  if (tf === "this_week" || tf === "week" || tf === "weekly") {
-    const day = now.getDay();
-    const diffToMonday = day === 0 ? -6 : 1 - day;
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() + diffToMonday);
-    startOfWeek.setHours(0, 0, 0, 0);
-    timeFilter = { createdAt: { $gte: startOfWeek } };
-  } else if (tf === "this_month" || tf === "month" || tf === "monthly") {
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    timeFilter = { createdAt: { $gte: startOfMonth } };
+  const { isPeriodSpecific, currentRange } = getTimeframeConfig(tf);
+
+  let teamScopeFilter: any = { ...leagueFilter };
+  if (hasLeagueFilter && matchedLeagueIds.length === 0) {
+    teamScopeFilter = { match: { $in: [] } };
+  } else if (isPeriodSpecific && currentRange) {
+    const periodMatchQuery: any = {
+      status: { $ne: "cancelled" },
+      matchDate: { $gte: currentRange.start, $lte: currentRange.end },
+    };
+    if (matchedLeagueIds.length > 0) {
+      periodMatchQuery.league = { $in: matchedLeagueIds };
+    }
+    const periodMatches = await Match.find(periodMatchQuery).select("_id").lean();
+    const periodMatchIds = periodMatches.map((m) => m._id);
+    teamScopeFilter = { match: { $in: periodMatchIds } };
   }
 
   const goalMatchFilter: any = {
-    ...leagueFilter,
+    ...teamScopeFilter,
     eventType: "goal",
+    "eventMeta.goalType": { $ne: "own_goal" },
   };
   const assistMatchFilter: any = {
-    ...leagueFilter,
+    ...teamScopeFilter,
     eventType: "assist",
   };
-
-  if (timeFilter) {
-    Object.assign(goalMatchFilter, timeFilter);
-    Object.assign(assistMatchFilter, timeFilter);
-  }
 
   // 1. Fetch top 1 from each category using the unified leaderboard logic
   // 2. Fetch top goal and assist teams
@@ -351,6 +476,8 @@ const fetchLeagueSummaryStatsByTimeframe = async (
     team: null,
     marketValue: 0,
     engCoine: 0,
+    lifetimeEngCoine: 0,
+    periodCoins: 0,
     goals: 0,
     totalGoals: 0,
     assists: 0,
@@ -410,13 +537,14 @@ const getLeagueSummaryFromDB = async (query?: Record<string, any>): Promise<any>
   if (leagueName || season) {
     const filterConditions: any = {};
     if (leagueName && leagueName.trim()) {
+      const safeLeagueName = escapeRegex(leagueName.trim());
       filterConditions.$or = [
-        { leagueName: { $regex: leagueName.trim(), $options: "i" } },
-        { name: { $regex: leagueName.trim(), $options: "i" } },
+        { leagueName: { $regex: safeLeagueName, $options: "i" } },
+        { name: { $regex: safeLeagueName, $options: "i" } },
       ];
     }
     if (season && season.trim()) {
-      filterConditions.season = { $regex: season.trim(), $options: "i" };
+      filterConditions.season = { $regex: escapeRegex(season.trim()), $options: "i" };
     }
 
     const leagues = await League.find(filterConditions).select("_id");
@@ -427,10 +555,17 @@ const getLeagueSummaryFromDB = async (query?: Record<string, any>): Promise<any>
     });
   }
 
+  const hasLeagueFilter = Boolean(
+    (directLeagueId && mongoose.Types.ObjectId.isValid(directLeagueId as string)) ||
+      (leagueName && leagueName.trim()) ||
+      (season && season.trim())
+  );
+
   const leagueFilter: any = {};
   if (matchedLeagueIds.length > 0) {
     const matchesInLeague = await Match.find({
       league: { $in: matchedLeagueIds },
+      status: { $ne: "cancelled" },
     }).select("_id");
     const matchIds = matchesInLeague.map((m) => m._id);
 
@@ -452,9 +587,9 @@ const getLeagueSummaryFromDB = async (query?: Record<string, any>): Promise<any>
   // If client requests "all", return weekly, monthly, and overall in parallel
   if (requestedTf === "all") {
     const [weekly, monthly, overall, videos] = await Promise.all([
-      fetchLeagueSummaryStatsByTimeframe(query, "weekly", leagueFilter),
-      fetchLeagueSummaryStatsByTimeframe(query, "monthly", leagueFilter),
-      fetchLeagueSummaryStatsByTimeframe(query, "overall", leagueFilter),
+      fetchLeagueSummaryStatsByTimeframe(query, "weekly", leagueFilter, matchedLeagueIds, hasLeagueFilter),
+      fetchLeagueSummaryStatsByTimeframe(query, "monthly", leagueFilter, matchedLeagueIds, hasLeagueFilter),
+      fetchLeagueSummaryStatsByTimeframe(query, "overall", leagueFilter, matchedLeagueIds, hasLeagueFilter),
       videosPromise,
     ]);
 
@@ -475,7 +610,7 @@ const getLeagueSummaryFromDB = async (query?: Record<string, any>): Promise<any>
   }
 
   const [stats, videos] = await Promise.all([
-    fetchLeagueSummaryStatsByTimeframe(query, normalizedTf, leagueFilter),
+    fetchLeagueSummaryStatsByTimeframe(query, normalizedTf, leagueFilter, matchedLeagueIds, hasLeagueFilter),
     videosPromise,
   ]);
 
@@ -736,37 +871,9 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
   const playerSearch = (search || searchTerm) as string;
   const directLeagueId = leagueId || (league && mongoose.Types.ObjectId.isValid(league as string) ? league : null);
 
-  // 🕒 TIMEFRAME DATE BOUNDARIES (Overall, This Month, This Week)
-  const tf = (timeframe || period || "overall").toString().toLowerCase();
-  let timeFilter: any = null;
-  let prevTimeFilter: any = null;
-
-  const now = new Date();
-  if (tf === "this_week" || tf === "week" || tf === "weekly") {
-    const day = now.getDay() || 7;
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - day + 1);
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const startOfPrevWeek = new Date(startOfWeek);
-    startOfPrevWeek.setDate(startOfPrevWeek.getDate() - 7);
-
-    timeFilter = { createdAt: { $gte: startOfWeek } };
-    prevTimeFilter = { createdAt: { $gte: startOfPrevWeek, $lt: startOfWeek } };
-  } else if (tf === "this_month" || tf === "month" || tf === "monthly") {
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    startOfPrevMonth.setHours(0, 0, 0, 0);
-
-    timeFilter = { createdAt: { $gte: startOfMonth } };
-    prevTimeFilter = { createdAt: { $gte: startOfPrevMonth, $lt: startOfMonth } };
-  } else {
-    // Overall: Baseline comparison with stats from 7 days prior for rank delta arrows
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    prevTimeFilter = { createdAt: { $lt: sevenDaysAgo } };
-  }
+  const { tf, isPeriodSpecific, currentRange, previousRange } = getTimeframeConfig(
+    timeframe || period
+  );
 
   const matchedLeagueIds: mongoose.Types.ObjectId[] = [];
   if (directLeagueId && mongoose.Types.ObjectId.isValid(directLeagueId as string)) {
@@ -776,13 +883,14 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
   if (leagueName || season) {
     const filterConditions: any = {};
     if (leagueName && leagueName.trim()) {
+      const safeLeagueName = escapeRegex(leagueName.trim());
       filterConditions.$or = [
-        { leagueName: { $regex: leagueName.trim(), $options: "i" } },
-        { name: { $regex: leagueName.trim(), $options: "i" } },
+        { leagueName: { $regex: safeLeagueName, $options: "i" } },
+        { name: { $regex: safeLeagueName, $options: "i" } },
       ];
     }
     if (season && season.trim()) {
-      filterConditions.season = { $regex: season.trim(), $options: "i" };
+      filterConditions.season = { $regex: escapeRegex(season.trim()), $options: "i" };
     }
 
     const leagues = await League.find(filterConditions).select("_id");
@@ -798,16 +906,24 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
   }
 
   let matchFilterOptions: any = undefined;
+  let prevMatchFilterOptions: any = undefined;
   let teamIdsInLeague: mongoose.Types.ObjectId[] = [];
+  let periodMatchIds: mongoose.Types.ObjectId[] = [];
+  let prevPeriodMatchIds: mongoose.Types.ObjectId[] = [];
+  let recent7dMatchIds: mongoose.Types.ObjectId[] = [];
 
   if (matchedLeagueIds.length > 0) {
     const [matchesInLeague, leagueTeamLinks, directTeams] = await Promise.all([
-      Match.find({ league: { $in: matchedLeagueIds } }).select("_id homeTeam awayTeam"),
+      Match.find({
+        league: { $in: matchedLeagueIds },
+        status: { $ne: "cancelled" },
+      })
+        .select("_id homeTeam awayTeam matchDate")
+        .lean(),
       LeagueTeam.find({ league: { $in: matchedLeagueIds } }).select("team"),
       Team.find({ league: { $in: matchedLeagueIds } }).select("_id"),
     ]);
 
-    const matchIds = matchesInLeague.map((m) => m._id);
     const leagueTeamIds = leagueTeamLinks.map((lt) => lt.team).filter(Boolean);
     const directTeamIds = directTeams.map((t) => t._id).filter(Boolean);
     const matchTeamIds = matchesInLeague.flatMap((m) => [m.homeTeam, m.awayTeam]).filter(Boolean);
@@ -820,25 +936,137 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
       return [];
     }
 
-    const baseMatchFilter: any = {
-      $or: [
-        { league: { $in: matchedLeagueIds } },
-        { match: { $in: matchIds } },
-      ],
-    };
-    if (timeFilter) {
-      Object.assign(baseMatchFilter, timeFilter);
+    const allMatchIds = matchesInLeague.map((m) => m._id);
+
+    if (isPeriodSpecific && currentRange && previousRange.start && previousRange.end) {
+      periodMatchIds = matchesInLeague
+        .filter((m) => m.matchDate && m.matchDate >= currentRange.start && m.matchDate <= currentRange.end)
+        .map((m) => m._id);
+
+      if (!periodMatchIds.length) {
+        return [];
+      }
+
+      prevPeriodMatchIds = matchesInLeague
+        .filter((m) => m.matchDate && m.matchDate >= previousRange.start! && m.matchDate <= previousRange.end!)
+        .map((m) => m._id);
+
+      matchFilterOptions = {
+        matchFilter: { match: { $in: periodMatchIds } },
+        matchEvaluationFilter: { match: { $in: periodMatchIds } },
+        matchSelectionFilter: { match: { $in: periodMatchIds } },
+        matchReviewFilter: { _id: { $in: periodMatchIds } },
+        validMatchFilter: { _id: { $in: periodMatchIds } },
+        includeManualStats: false,
+      };
+
+      prevMatchFilterOptions = {
+        matchFilter: { match: { $in: prevPeriodMatchIds } },
+        matchEvaluationFilter: { match: { $in: prevPeriodMatchIds } },
+        matchSelectionFilter: { match: { $in: prevPeriodMatchIds } },
+        matchReviewFilter: { _id: { $in: prevPeriodMatchIds } },
+        validMatchFilter: { _id: { $in: prevPeriodMatchIds } },
+        includeManualStats: false,
+      };
+    } else {
+      const endBefore = previousRange.endBefore || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      prevPeriodMatchIds = matchesInLeague
+        .filter((m) => m.matchDate && m.matchDate < endBefore)
+        .map((m) => m._id);
+      recent7dMatchIds = matchesInLeague
+        .filter((m) => m.matchDate && m.matchDate >= endBefore)
+        .map((m) => m._id);
+
+      matchFilterOptions = {
+        matchFilter: {
+          $or: [
+            { league: { $in: matchedLeagueIds } },
+            { match: { $in: allMatchIds } },
+          ],
+        },
+        matchEvaluationFilter: { match: { $in: allMatchIds } },
+        matchSelectionFilter: { match: { $in: allMatchIds } },
+        matchReviewFilter: { _id: { $in: allMatchIds } },
+        validMatchFilter: { _id: { $in: allMatchIds } },
+        includeManualStats: true,
+        manualStatsLeagueIds: matchedLeagueIds,
+      };
+
+      prevMatchFilterOptions = {
+        matchFilter: { match: { $in: prevPeriodMatchIds } },
+        matchEvaluationFilter: { match: { $in: prevPeriodMatchIds } },
+        matchSelectionFilter: { match: { $in: prevPeriodMatchIds } },
+        matchReviewFilter: { _id: { $in: prevPeriodMatchIds } },
+        validMatchFilter: { _id: { $in: prevPeriodMatchIds } },
+        includeManualStats: false,
+      };
     }
+  } else if (isPeriodSpecific && currentRange && previousRange.start && previousRange.end) {
+    const [periodMatches, prevPeriodMatches] = await Promise.all([
+      Match.find({
+        status: { $ne: "cancelled" },
+        matchDate: { $gte: currentRange.start, $lte: currentRange.end },
+      })
+        .select("_id")
+        .lean(),
+      Match.find({
+        status: { $ne: "cancelled" },
+        matchDate: { $gte: previousRange.start, $lte: previousRange.end },
+      })
+        .select("_id")
+        .lean(),
+    ]);
+
+    periodMatchIds = periodMatches.map((m) => m._id);
+    if (!periodMatchIds.length) {
+      return [];
+    }
+    prevPeriodMatchIds = prevPeriodMatches.map((m) => m._id);
 
     matchFilterOptions = {
-      matchFilter: baseMatchFilter,
-      matchEvaluationFilter: {
-        match: { $in: matchIds },
-      },
+      matchFilter: { match: { $in: periodMatchIds } },
+      matchEvaluationFilter: { match: { $in: periodMatchIds } },
+      matchSelectionFilter: { match: { $in: periodMatchIds } },
+      matchReviewFilter: { _id: { $in: periodMatchIds } },
+      validMatchFilter: { _id: { $in: periodMatchIds } },
+      includeManualStats: false,
     };
-  } else if (timeFilter) {
-    matchFilterOptions = {
-      matchFilter: timeFilter,
+
+    prevMatchFilterOptions = {
+      matchFilter: { match: { $in: prevPeriodMatchIds } },
+      matchEvaluationFilter: { match: { $in: prevPeriodMatchIds } },
+      matchSelectionFilter: { match: { $in: prevPeriodMatchIds } },
+      matchReviewFilter: { _id: { $in: prevPeriodMatchIds } },
+      validMatchFilter: { _id: { $in: prevPeriodMatchIds } },
+      includeManualStats: false,
+    };
+  } else {
+    const endBefore = previousRange.endBefore || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [prevMatches, recentMatches] = await Promise.all([
+      Match.find({
+        status: { $ne: "cancelled" },
+        matchDate: { $lt: endBefore },
+      })
+        .select("_id")
+        .lean(),
+      Match.find({
+        status: { $ne: "cancelled" },
+        matchDate: { $gte: endBefore },
+      })
+        .select("_id")
+        .lean(),
+    ]);
+
+    prevPeriodMatchIds = prevMatches.map((m) => m._id);
+    recent7dMatchIds = recentMatches.map((m) => m._id);
+
+    prevMatchFilterOptions = {
+      matchFilter: { match: { $in: prevPeriodMatchIds } },
+      matchEvaluationFilter: { match: { $in: prevPeriodMatchIds } },
+      matchSelectionFilter: { match: { $in: prevPeriodMatchIds } },
+      matchReviewFilter: { _id: { $in: prevPeriodMatchIds } },
+      validMatchFilter: { _id: { $in: prevPeriodMatchIds } },
+      includeManualStats: false,
     };
   }
 
@@ -862,7 +1090,7 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
   };
 
   if (ageGroup) {
-    userFilter.ageGroup = { $regex: new RegExp(`^${ageGroup.toString().trim()}$`, "i") };
+    userFilter.ageGroup = { $regex: new RegExp(`^${escapeRegex(ageGroup.toString().trim())}$`, "i") };
   }
 
   if (teamId) {
@@ -874,7 +1102,7 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
   }
 
   if (playerSearch && playerSearch.trim()) {
-    const searchRegex = new RegExp(playerSearch.trim(), "i");
+    const searchRegex = new RegExp(escapeRegex(playerSearch.trim()), "i");
     userFilter.$and = [
       {
         $or: [
@@ -902,26 +1130,26 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
 
   const playerIds = players.map((p) => p._id);
 
-  // Baseline filter for rank movements
-  const prevMatchFilterOptions: any = prevTimeFilter
-    ? {
-        matchFilter: {
-          ...(matchFilterOptions?.matchFilter || {}),
-          ...prevTimeFilter,
-        },
-        matchEvaluationFilter: matchFilterOptions?.matchEvaluationFilter,
-      }
-    : undefined;
-
-  const [statsMap, prevStatsMap] = await Promise.all([
-    getBatchPlayerStatsSummary(playerIds, matchFilterOptions),
-    prevMatchFilterOptions
-      ? getBatchPlayerStatsSummary(playerIds, prevMatchFilterOptions)
-      : Promise.resolve(new Map<string, IPlayerStatsDetails>()),
-  ]);
+  const [statsMap, prevStatsMap, periodCoinsMap, prevPeriodCoinsMap, recent7dCoinsMap] =
+    await Promise.all([
+      getBatchPlayerStatsSummary(playerIds, matchFilterOptions),
+      prevMatchFilterOptions
+        ? getBatchPlayerStatsSummary(playerIds, prevMatchFilterOptions)
+        : Promise.resolve(new Map<string, IPlayerStatsDetails>()),
+      isPeriodSpecific
+        ? getBatchMatchEarnedCoins(playerIds, periodMatchIds)
+        : Promise.resolve(new Map<string, number>()),
+      isPeriodSpecific
+        ? getBatchMatchEarnedCoins(playerIds, prevPeriodMatchIds)
+        : Promise.resolve(new Map<string, number>()),
+      !isPeriodSpecific
+        ? getBatchMatchEarnedCoins(playerIds, recent7dMatchIds)
+        : Promise.resolve(new Map<string, number>()),
+    ]);
 
   return players.map((p: any) => {
-    const stats: IPlayerStatsDetails = statsMap.get(p._id.toString()) || {
+    const pIdStr = p._id.toString();
+    const stats: IPlayerStatsDetails = statsMap.get(pIdStr) || {
       goals: 0,
       assists: 0,
       cleanSheets: 0,
@@ -932,7 +1160,7 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
       matchesPlayed: 0,
     };
 
-    const prevStats: IPlayerStatsDetails = prevStatsMap.get(p._id.toString()) || {
+    const prevStats: IPlayerStatsDetails = prevStatsMap.get(pIdStr) || {
       goals: 0,
       assists: 0,
       cleanSheets: 0,
@@ -951,6 +1179,14 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
       (stats.yellowCards * 1) -
       (stats.redCards * 3);
 
+    const lifetimeEngCoine = Number(p.engCoine) || 0;
+    const effectiveCoins = isPeriodSpecific
+      ? periodCoinsMap.get(pIdStr) || 0
+      : lifetimeEngCoine;
+    const prevCoins = isPeriodSpecific
+      ? prevPeriodCoinsMap.get(pIdStr) || 0
+      : Math.max(0, lifetimeEngCoine - (recent7dCoinsMap.get(pIdStr) || 0));
+
     return {
       _id: p._id,
       playerId: p._id,
@@ -965,7 +1201,10 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
       ageGroup: p.ageGroup || null,
       team: p.selectTeam || null,
       marketValue: p.marketValue || 0,
-      engCoine: p.engCoine || 0,
+      engCoine: effectiveCoins,
+      lifetimeEngCoine,
+      periodCoins: effectiveCoins,
+      prevCoins,
       goals: stats.goals,
       totalGoals: stats.goals,
       assists: stats.assists,
@@ -992,9 +1231,12 @@ const getTopGoalScorersFromDB = async (query?: Record<string, any>) => {
   const limit = parseInt(query?.limit as string) || defaultLimit;
   const enriched = await getEnrichedPlayersWithStats(query);
 
-  const sorted = [...enriched].sort((a, b) => {
+  const eligible = enriched.filter((p) => (p.goals || 0) > 0);
+
+  const sorted = [...eligible].sort((a, b) => {
     if (b.goals !== a.goals) return b.goals - a.goals;
     if (b.playerOfTheDay !== a.playerOfTheDay) return b.playerOfTheDay - a.playerOfTheDay;
+    if (b.engCoine !== a.engCoine) return b.engCoine - a.engCoine;
     return b.marketValue - a.marketValue;
   });
 
@@ -1018,9 +1260,12 @@ const getTopAssistsFromDB = async (query?: Record<string, any>) => {
   const limit = parseInt(query?.limit as string) || defaultLimit;
   const enriched = await getEnrichedPlayersWithStats(query);
 
-  const sorted = [...enriched].sort((a, b) => {
+  const eligible = enriched.filter((p) => (p.assists || 0) > 0);
+
+  const sorted = [...eligible].sort((a, b) => {
     if (b.assists !== a.assists) return b.assists - a.assists;
     if (b.playerOfTheDay !== a.playerOfTheDay) return b.playerOfTheDay - a.playerOfTheDay;
+    if (b.engCoine !== a.engCoine) return b.engCoine - a.engCoine;
     return b.marketValue - a.marketValue;
   });
 
@@ -1044,18 +1289,19 @@ const getTopCleanSheetsFromDB = async (query?: Record<string, any>) => {
   const limit = parseInt(query?.limit as string) || defaultLimit;
   const enriched = await getEnrichedPlayersWithStats(query);
 
-  // 🧤 Filter ONLY Goalkeepers (position: Goalkeeper / GK / Goal Keeper)
+  // 🧤 Filter ONLY Goalkeepers with cleanSheets > 0
   const goalkeepers = enriched.filter((p) => {
     const pos = (p.position || "").toString().trim();
-    return (
+    const isGK =
       /^(goalkeeper|gk|goal\s*keeper)$/i.test(pos) ||
-      /gk|goalkeeper/i.test(pos)
-    );
+      /gk|goalkeeper/i.test(pos);
+    return isGK && (p.cleanSheets || 0) > 0;
   });
 
   const sorted = [...goalkeepers].sort((a, b) => {
     if (b.cleanSheets !== a.cleanSheets) return b.cleanSheets - a.cleanSheets;
     if (b.playerOfTheDay !== a.playerOfTheDay) return b.playerOfTheDay - a.playerOfTheDay;
+    if (b.engCoine !== a.engCoine) return b.engCoine - a.engCoine;
     return (b.marketValue || 0) - (a.marketValue || 0);
   });
 
@@ -1072,35 +1318,23 @@ const getTopCleanSheetsFromDB = async (query?: Record<string, any>) => {
   return attachRankAndMovement(sorted, baselineCompareFn, limit);
 };
 
-// 4. 🌟 TOP OVERALL BEST PLAYERS (Max Coin / engCoine Wise, Supports limit=100 for sections, Top 20 for Home, Rank Movement Arrows)
+// 4. 🌟 TOP OVERALL BEST PLAYERS (Coin-wise: match-earned coins for weekly/monthly, total engCoine for overall)
 const getTopOverallPlayersFromDB = async (query?: Record<string, any>) => {
   const isHome = query?.isHome === "true" || query?.home === "true";
   const defaultLimit = isHome ? 20 : 100;
   const limit = parseInt(query?.limit as string) || defaultLimit;
   const enriched = await getEnrichedPlayersWithStats(query);
 
-  const tf = (query?.timeframe || query?.period || "overall").toString().toLowerCase();
-  const isPeriodSpecific =
-    tf === "weekly" ||
-    tf === "week" ||
-    tf === "this_week" ||
-    tf === "monthly" ||
-    tf === "month" ||
-    tf === "this_month";
+  const eligible = enriched.filter((p) => (Number(p.engCoine) || 0) > 0);
 
-  // When viewing weekly or monthly, sort by performance score earned in that timeframe
-  // When viewing overall, sort strictly by max lifetime coins (engCoine), then marketValue
-  const sorted = [...enriched].sort((a, b) => {
-    if (isPeriodSpecific) {
-      if (b.score !== a.score) return b.score - a.score;
-      if (b.goals !== a.goals) return b.goals - a.goals;
-      if (b.assists !== a.assists) return b.assists - a.assists;
-      return (b.marketValue || 0) - (a.marketValue || 0);
-    }
-
+  const sorted = [...eligible].sort((a, b) => {
     const aCoins = Number(a.engCoine) || 0;
     const bCoins = Number(b.engCoine) || 0;
     if (bCoins !== aCoins) return bCoins - aCoins;
+
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.goals !== a.goals) return b.goals - a.goals;
+    if (b.assists !== a.assists) return b.assists - a.assists;
 
     const aMarket = Number(a.marketValue) || 0;
     const bMarket = Number(b.marketValue) || 0;
@@ -1108,6 +1342,9 @@ const getTopOverallPlayersFromDB = async (query?: Record<string, any>) => {
   });
 
   const baselineCompareFn = (a: any, b: any) => {
+    const aPrevCoins = Number(a.prevCoins) || 0;
+    const bPrevCoins = Number(b.prevCoins) || 0;
+    if (bPrevCoins !== aPrevCoins) return bPrevCoins - aPrevCoins;
     const aPrevScore = (a.prevStats?.goals ?? 0) * 4 + (a.prevStats?.assists ?? 0) * 3;
     const bPrevScore = (b.prevStats?.goals ?? 0) * 4 + (b.prevStats?.assists ?? 0) * 3;
     if (bPrevScore !== aPrevScore) return bPrevScore - aPrevScore;
