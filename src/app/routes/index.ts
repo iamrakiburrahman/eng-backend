@@ -53,6 +53,7 @@ import { ScorePredictionRoutes } from "../modules/scorePrediction/scorePredictio
 import { RefereeVotingRoutes } from "../modules/refereeVoting/refereeVoting.route";
 import { PromotionalZoneRoutes } from "../modules/promotionalZone/promotionalZone.route";
 import { AppModalRoutes } from "../modules/appModal/appModal.route";
+import { BookAScoutRoutes } from "../modules/bookAScout/bookAScout.route";
 
 const router = express.Router();
 
@@ -120,6 +121,7 @@ const apiRoutes = [
     { path: "/promotions", route: PromotionalZoneRoutes },
     { path: "/app-modal", route: AppModalRoutes },
     { path: "/app-popup", route: AppModalRoutes },
+    { path: "/book-a-scout", route: BookAScoutRoutes },
 ]
 
 apiRoutes.forEach(route => router.use(route.path, route.route));

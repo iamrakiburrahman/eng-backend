@@ -1089,9 +1089,59 @@ const updateVotingPollInDB = async (
     throw new ApiError(StatusCodes.NOT_FOUND, "Referee voting poll not found.");
   }
 
-  if (payload.startDate && payload.endDate) {
-    const start = new Date(payload.startDate);
-    const end = new Date(payload.endDate);
+  const updatePayload: Partial<IRefereeVoting> & Record<string, unknown> = {
+    ...payload,
+  };
+
+  // Strip blank strings from FormData / partial updates so enum/date/ObjectId validation does not fail
+  const nonEmptyFields = [
+    "title",
+    "votingType",
+    "league",
+    "month",
+    "weekNumber",
+    "startDate",
+    "endDate",
+    "status",
+    "banner",
+  ];
+  for (const field of nonEmptyFields) {
+    const val = updatePayload[field];
+    if (
+      val === undefined ||
+      val === null ||
+      (typeof val === "string" && val.trim() === "")
+    ) {
+      delete updatePayload[field];
+    }
+  }
+
+  if (updatePayload.league !== undefined && String(updatePayload.league) === "all") {
+    delete updatePayload.league;
+  }
+
+  if (updatePayload.weekNumber !== undefined) {
+    const parsedWeek = Number(updatePayload.weekNumber);
+    if (!Number.isFinite(parsedWeek)) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "weekNumber must be a valid number.",
+      );
+    }
+    updatePayload.weekNumber = parsedWeek;
+  }
+
+  const effectiveStart = updatePayload.startDate ?? existingPoll.startDate;
+  const effectiveEnd = updatePayload.endDate ?? existingPoll.endDate;
+  if (effectiveStart && effectiveEnd) {
+    const start = new Date(effectiveStart as string | Date);
+    const end = new Date(effectiveEnd as string | Date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Invalid startDate or endDate.",
+      );
+    }
     if (start >= end) {
       throw new ApiError(
         StatusCodes.BAD_REQUEST,
@@ -1101,13 +1151,16 @@ const updateVotingPollInDB = async (
   }
 
   // Preserve existing vote counts for matched referees if nominees are updated
-  if (Array.isArray(payload.nominees) && payload.nominees.length >= 2) {
+  if (
+    Array.isArray(updatePayload.nominees) &&
+    updatePayload.nominees.length >= 2
+  ) {
     const refereeVotesMap = new Map<string, number>();
     existingPoll.nominees.forEach((n) => {
       refereeVotesMap.set(n.referee.toString(), n.votesCount || 0);
     });
 
-    payload.nominees = payload.nominees.map((n) => ({
+    updatePayload.nominees = updatePayload.nominees.map((n) => ({
       referee: new Types.ObjectId(n.referee),
       matchesOfficiatedCount: n.matchesOfficiatedCount || 0,
       fairPlayRating: n.fairPlayRating || 90,
@@ -1116,10 +1169,14 @@ const updateVotingPollInDB = async (
     }));
   }
 
-  const result = await RefereeVoting.findByIdAndUpdate(id, payload, {
-    new: true,
-    runValidators: true,
-  })
+  const result = await RefereeVoting.findByIdAndUpdate(
+    id,
+    { $set: updatePayload },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
     .populate("league", "leagueName season ageGroup")
     .populate(
       "nominees.referee",
