@@ -181,13 +181,18 @@ const autoSyncPollStatus = async (poll: any) => {
       try {
         const pe = await PlayerEconomy.findOne().lean();
         const potdCoin = Number(pe?.playerOfTheDay?.coin) || 5000;
-        const rewardAmount = poll.votingType === 'MONTH' ? potdCoin * 2 : potdCoin;
+        const rewardAmount =
+          poll.votingType === 'MONTH' ? potdCoin * 2 :
+          poll.votingType === 'OVERALL' ? potdCoin * 3 : potdCoin;
+        const typeTitle =
+          poll.votingType === 'MONTH' ? 'Player of the Month' :
+          poll.votingType === 'OVERALL' ? 'Overall Player' : 'Player of the Week';
 
         await recordCoinTransaction({
           userId: resolvedWinnerId,
           amount: rewardAmount,
           category: COIN_TRANSACTION_CATEGORY.TOURNAMENT_PRIZE,
-          title: `${poll.votingType === 'MONTH' ? 'Player of the Month' : 'Player of the Week'} Winner Prize`,
+          title: `${typeTitle} Winner Prize`,
           description: `Reward for winning ${poll.title}`,
           referenceId: `${poll._id.toString()}_winner`,
         });
@@ -228,6 +233,7 @@ const createVotingPollToDB = async (
     !league ||
     String(league).trim().toLowerCase() === 'all' ||
     String(league).trim().toLowerCase() === 'overall' ||
+    String(votingType).toUpperCase() === 'OVERALL' ||
     Boolean(payload.isOverall);
 
   if (!isOverall && league) {
@@ -990,6 +996,11 @@ const updateVotingPollInDB = async (
     }
   }
 
+  if (updatePayload.votingType === 'OVERALL') {
+    updatePayload.isOverall = true;
+    (updatePayload as any).league = null;
+  }
+
   if (updatePayload.league !== undefined) {
     const rawLeague = String(updatePayload.league).trim().toLowerCase();
     if (!updatePayload.league || rawLeague === 'all' || rawLeague === 'overall') {
@@ -1110,13 +1121,18 @@ const toggleVotingStatusInDB = async (
       try {
         const pe = await PlayerEconomy.findOne().lean();
         const potdCoin = Number(pe?.playerOfTheDay?.coin) || 5000;
-        const rewardAmount = poll.votingType === 'MONTH' ? potdCoin * 2 : potdCoin;
+        const rewardAmount =
+          poll.votingType === 'MONTH' ? potdCoin * 2 :
+          poll.votingType === 'OVERALL' ? potdCoin * 3 : potdCoin;
+        const typeTitle =
+          poll.votingType === 'MONTH' ? 'Player of the Month' :
+          poll.votingType === 'OVERALL' ? 'Overall Player' : 'Player of the Week';
 
         await recordCoinTransaction({
           userId: resolvedWinnerId,
           amount: rewardAmount,
           category: COIN_TRANSACTION_CATEGORY.TOURNAMENT_PRIZE,
-          title: `${poll.votingType === 'MONTH' ? 'Player of the Month' : 'Player of the Week'} Winner Prize`,
+          title: `${typeTitle} Winner Prize`,
           description: `Reward for winning ${poll.title}`,
           referenceId: `${poll._id.toString()}_winner`,
         });

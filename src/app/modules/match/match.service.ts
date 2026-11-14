@@ -1517,6 +1517,20 @@ const updateMatchToDB = async (id: string, payload: any) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Same team cannot play match");
   }
 
+  if (payload.matchDate !== undefined) {
+    if (payload.matchDate) {
+      const parsedMatchDate = new Date(payload.matchDate);
+      if (!isNaN(parsedMatchDate.getTime())) {
+        payload.matchDate = parsedMatchDate;
+        if (payload.scheduledAt === undefined) {
+          payload.scheduledAt = parsedMatchDate;
+        }
+      }
+    } else {
+      payload.matchDate = null;
+    }
+  }
+
   const dateFields = [
     "scheduledAt",
     "startedAt",

@@ -1,6 +1,6 @@
 import { Model, Types } from 'mongoose';
 
-export type TVotingType = 'WEEK' | 'MONTH';
+export type TVotingType = 'WEEK' | 'MONTH' | 'OVERALL';
 
 export type TVotingStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 

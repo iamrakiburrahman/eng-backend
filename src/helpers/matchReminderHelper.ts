@@ -254,7 +254,7 @@ export async function sendSingleMatchReminder(
   const aName = (match.awayTeam as any)?.teamName || 'Away Team';
   const venue = await resolveMatchVenueName(match);
 
-  const matchTime = new Date(match.scheduledAt || match.matchDate);
+  const matchTime = new Date(match.matchDate || match.scheduledAt);
   const targetTz = setting.timezone || 'Europe/London';
 
   let timeStr = '';

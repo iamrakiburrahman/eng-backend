@@ -40,7 +40,7 @@ const PlayerVotingSchema = new Schema<IPlayerVoting, PlayerVotingModel>(
     },
     votingType: {
       type: String,
-      enum: ['WEEK', 'MONTH'],
+      enum: ['WEEK', 'MONTH', 'OVERALL'],
       required: true,
       default: 'WEEK',
     },
