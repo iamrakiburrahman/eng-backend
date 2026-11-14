@@ -47,7 +47,12 @@ const PlayerVotingSchema = new Schema<IPlayerVoting, PlayerVotingModel>(
     league: {
       type: Schema.Types.ObjectId,
       ref: 'League',
-      required: true,
+      required: false,
+      index: true,
+    },
+    isOverall: {
+      type: Boolean,
+      default: false,
       index: true,
     },
     ageGroup: {

@@ -205,10 +205,10 @@ const createVotingPollToDB = async (
 ): Promise<IPlayerVoting> => {
   const { title, votingType, league, ageGroup, startDate, endDate, nominees } = payload;
 
-  if (!title || !votingType || !league || !ageGroup || !startDate || !endDate) {
+  if (!title || !votingType || !ageGroup || !startDate || !endDate) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
-      'Missing required fields (title, votingType, league, ageGroup, startDate, endDate).'
+      'Missing required fields (title, votingType, ageGroup, startDate, endDate).'
     );
   }
 
@@ -223,10 +223,19 @@ const createVotingPollToDB = async (
     throw new ApiError(StatusCodes.BAD_REQUEST, 'startDate must be before endDate.');
   }
 
-  // Verify league exists
-  const existingLeague = await League.findById(league);
-  if (!existingLeague) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Specified League was not found.');
+  let resolvedLeague: Types.ObjectId | undefined = undefined;
+  const isOverall =
+    !league ||
+    String(league).trim().toLowerCase() === 'all' ||
+    String(league).trim().toLowerCase() === 'overall' ||
+    Boolean(payload.isOverall);
+
+  if (!isOverall && league) {
+    const existingLeague = await League.findById(league);
+    if (!existingLeague) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Specified League was not found.');
+    }
+    resolvedLeague = new Types.ObjectId(String(league));
   }
 
   // Verify nominees
@@ -273,6 +282,8 @@ const createVotingPollToDB = async (
 
   const pollData = {
     ...payload,
+    league: resolvedLeague,
+    isOverall,
     startDate: start,
     endDate: end,
     status,
@@ -313,7 +324,15 @@ const getAllVotingPollsFromDB = async (
   }
 
   if (query.league && query.league !== 'all') {
-    filter.league = query.league;
+    if (String(query.league).toLowerCase() === 'overall') {
+      filter.$or = [{ isOverall: true }, { league: null }, { league: { $exists: false } }];
+    } else {
+      filter.league = query.league;
+    }
+  }
+
+  if (query.isOverall !== undefined && query.isOverall !== 'all') {
+    filter.isOverall = query.isOverall === 'true' || query.isOverall === true;
   }
 
   if (query.ageGroup && query.ageGroup !== 'all') {
@@ -552,7 +571,25 @@ const getActiveVotingPollsForClientFromDB = async (
   };
 
   if (query.leagueId || query.league) {
-    filter.league = query.leagueId || query.league;
+    const lId = String(query.leagueId || query.league).trim();
+    if (lId.toLowerCase() === 'overall' || lId.toLowerCase() === 'all') {
+      filter.$or = [{ isOverall: true }, { league: null }, { league: { $exists: false } }];
+    } else {
+      if (query.includeOverall === 'true') {
+        filter.$or = [
+          { league: lId },
+          { isOverall: true },
+          { league: null },
+          { league: { $exists: false } },
+        ];
+      } else {
+        filter.league = lId;
+      }
+    }
+  }
+
+  if (query.isOverall !== undefined && query.isOverall !== 'all') {
+    filter.isOverall = query.isOverall === 'true' || query.isOverall === true;
   }
 
   if (query.ageGroup && query.ageGroup !== 'all') {
@@ -953,6 +990,27 @@ const updateVotingPollInDB = async (
     }
   }
 
+  if (updatePayload.league !== undefined) {
+    const rawLeague = String(updatePayload.league).trim().toLowerCase();
+    if (!updatePayload.league || rawLeague === 'all' || rawLeague === 'overall') {
+      (updatePayload as any).league = null;
+      updatePayload.isOverall = true;
+    } else {
+      const existingLeague = await League.findById(updatePayload.league);
+      if (!existingLeague) {
+        throw new ApiError(StatusCodes.NOT_FOUND, 'Specified League was not found.');
+      }
+      updatePayload.league = new Types.ObjectId(String(updatePayload.league));
+      updatePayload.isOverall = false;
+    }
+  } else if (updatePayload.isOverall !== undefined) {
+    updatePayload.isOverall =
+      Boolean(updatePayload.isOverall) && String(updatePayload.isOverall) !== 'false';
+    if (updatePayload.isOverall) {
+      (updatePayload as any).league = null;
+    }
+  }
+
   if (updatePayload.weekNumber !== undefined) {
     const parsedWeek = Number(updatePayload.weekNumber);
     if (!Number.isFinite(parsedWeek)) {
@@ -1282,7 +1340,25 @@ const getPastWinnersFromDB = async (
   }
 
   if (query.leagueId || query.league) {
-    filter.league = query.leagueId || query.league;
+    const lId = String(query.leagueId || query.league).trim();
+    if (lId.toLowerCase() === 'overall' || lId.toLowerCase() === 'all') {
+      filter.$or = [{ isOverall: true }, { league: null }, { league: { $exists: false } }];
+    } else {
+      if (query.includeOverall === 'true') {
+        filter.$or = [
+          { league: lId },
+          { isOverall: true },
+          { league: null },
+          { league: { $exists: false } },
+        ];
+      } else {
+        filter.league = lId;
+      }
+    }
+  }
+
+  if (query.isOverall !== undefined && query.isOverall !== 'all') {
+    filter.isOverall = query.isOverall === 'true' || query.isOverall === true;
   }
 
   if (query.ageGroup && query.ageGroup !== 'all') {

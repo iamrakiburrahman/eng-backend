@@ -16,7 +16,8 @@ export interface IPlayerVoting {
   _id?: Types.ObjectId;
   title: string; // e.g. "Player of the Week - Week 42" or "Player of the Month - October 2026"
   votingType: TVotingType;
-  league: Types.ObjectId;
+  league?: Types.ObjectId;
+  isOverall?: boolean;
   ageGroup: string; // e.g. "U14", "U16", "U18", "Open", etc.
   season?: string; // e.g. "2025/2026"
   weekNumber?: number; // 1-52
