@@ -7,9 +7,9 @@ import { BookAScoutController } from './bookAScout.controller';
 const router = express.Router();
 
 // 1. PUBLIC / MOBILE APP ENDPOINTS
-router.get('/active', BookAScoutController.getActiveBookAScout);
-router.post('/:id/view', BookAScoutController.recordBookAScoutView);
-router.post('/:id/click', BookAScoutController.recordBookAScoutClick);
+router.get('/active', auth(false), BookAScoutController.getActiveBookAScout);
+router.post('/:id/view', auth(false), BookAScoutController.recordBookAScoutView);
+router.post('/:id/click', auth(false), BookAScoutController.recordBookAScoutClick);
 
 // 2. ADMIN MANAGEMENT ENDPOINTS
 router
