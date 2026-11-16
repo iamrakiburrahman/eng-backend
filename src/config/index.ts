@@ -89,6 +89,11 @@ export default {
     apiKey: process.env.API_KEY,
     emailHeader: process.env.EMAIL_HEADER_NAME,
     from: process.env.EMAIL_FROM,
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+    port: process.env.EMAIL_PORT ? Number(process.env.EMAIL_PORT) : 587,
+    host: process.env.EMAIL_HOST || "smtp.gmail.com",
+    brevoFrom: process.env.BREVO_FROM || "no-replay@engsportsevents.co.uk",
   },
   social: {
     google_client_id: process.env.GOOGLE_CLIENT_ID,

@@ -54,6 +54,7 @@ import { RefereeVotingRoutes } from "../modules/refereeVoting/refereeVoting.rout
 import { PromotionalZoneRoutes } from "../modules/promotionalZone/promotionalZone.route";
 import { AppModalRoutes } from "../modules/appModal/appModal.route";
 import { BookAScoutRoutes } from "../modules/bookAScout/bookAScout.route";
+import { LiveTransferMarketRoutes } from "../modules/liveTransferMarket/liveTransferMarket.route";
 
 const router = express.Router();
 
@@ -79,6 +80,8 @@ const apiRoutes = [
     { path: "/reward-products", route: RewardProductsRoute },
     { path: "/reward-order", route: RewardOrderRoute },
     { path: "/transfers", route: TransferRoute },
+    { path: "/live-transfer", route: LiveTransferMarketRoutes },
+    { path: "/live-transfer-market", route: LiveTransferMarketRoutes },
     { path: "/manager-team", route: ManagerAssignRoute},
     { path: "/team-dashboard", route: TeamDashboard},
     { path: "/player-dashboard", route: PlayerDashboard},

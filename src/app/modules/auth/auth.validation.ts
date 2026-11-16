@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { USER_ROLES } from '../../../enums/user';
 
 const createVerifyEmailZodSchema = z.object({
   body: z.object({
@@ -50,10 +51,27 @@ const createChangePasswordZodSchema = z.object({
   }),
 });
 
+const socialLoginZodSchema = z.object({
+  body: z.object({
+    idToken: z.string().min(1, { message: "Firebase idToken is required" }),
+    fcmToken: z.string().optional().nullable(),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+  }),
+});
+
+const selectRoleZodSchema = z.object({
+  body: z.object({
+    role: z.nativeEnum(USER_ROLES),
+  }),
+});
+
 export const AuthValidation = {
     createVerifyEmailZodSchema,
     createForgetPasswordZodSchema,
     createLoginZodSchema,
     createResetPasswordZodSchema,
     createChangePasswordZodSchema,
+    socialLoginZodSchema,
+    selectRoleZodSchema,
 };

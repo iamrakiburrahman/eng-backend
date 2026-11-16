@@ -54,6 +54,15 @@ const userSchema = new Schema<IUser, UserModal>(
       type: Boolean,
       default: false,
     },
+    authProvider: {
+      type: String,
+      default: "email",
+    },
+    firebaseUid: {
+      type: String,
+      default: null,
+      sparse: true,
+    },
     authentication: {
       type: {
         isResetPassword: {
@@ -193,6 +202,16 @@ const userSchema = new Schema<IUser, UserModal>(
     permissions: {
       type: [String],
       default: [],
+    },
+    isLiveTransferListed: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    liveTransferListingId: {
+      type: Schema.Types.ObjectId,
+      ref: 'LiveTransferMarket',
+      default: null,
     },
   },
   {

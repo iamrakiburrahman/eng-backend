@@ -38,6 +38,8 @@ export type IUser = {
     location: string;
     profile: string;
     verified: boolean;
+    authProvider?: string;
+    firebaseUid?: string;
     authentication?: IAuthenticationProps;
     accountInformation?: IStripeAccountInfo;
 
@@ -69,6 +71,8 @@ export type IUser = {
     isSubscribed?: boolean;
     hasAccess?: boolean;
     permissions?: string[];
+    isLiveTransferListed?: boolean;
+    liveTransferListingId?: Types.ObjectId;
 }
 
 export type UserModal = {

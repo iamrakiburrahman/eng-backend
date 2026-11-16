@@ -14,6 +14,7 @@ import { PlayerEconomy } from "../coinAndBudget/playerEconomySchema.model";
 import { recordTeamCoinTransaction } from "../../../helpers/teamCoinLedgerHelper";
 import { TEAM_COIN_CATEGORY } from "../teamCoinTransaction/teamCoinTransaction.interface";
 import { carryForwardPlayerStats } from "../../../helpers/playerTransferStatsHelper";
+import { LiveTransferMarket } from "../liveTransferMarket/liveTransferMarket.model";
 
 // CREATE
 const createTransferToDB = async (payload: any, userId: string) => {
@@ -186,10 +187,14 @@ const getAllTransfersFromDB = async (query: Record<string, any>) => {
 
   if (query.status && query.status !== "ALL") {
     if (query.status === "ACTION_REQUIRED") {
-      filter.status = { $in: ["PENDING", "MANAGER_APPROVED"] };
+      filter.status = { $in: ["PENDING", "MANAGER_APPROVED", "BOTH_APPROVED"] };
     } else {
       filter.status = query.status;
     }
+  }
+
+  if (query.isLiveMarket !== undefined && query.isLiveMarket !== "ALL" && query.isLiveMarket !== "") {
+    filter.isLiveMarket = query.isLiveMarket === "true" || query.isLiveMarket === true;
   }
 
   const searchTerm = (query.searchTerm || query.search || query.searchValue) as string;
@@ -300,6 +305,12 @@ const getAllTransfersFromDB = async (query: Record<string, any>) => {
       transferType: t.transferType,
       status: t.status,
       rejectReason: t.rejectReason,
+
+      // LIVE TRANSFER MARKET DATA
+      isLiveMarket: t.isLiveMarket || false,
+      playerApproval: t.playerApproval || null,
+      managerApproval: t.managerApproval || null,
+      note: t.note || null,
 
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
@@ -518,7 +529,17 @@ const approveTransferToDB = async (id: string, user: any) => {
     }
 
     // For club-to-club transfers, selling club manager must accept first
-    if (
+    if (transfer.isLiveMarket) {
+      if (
+        transfer.playerApproval?.status !== "APPROVED" ||
+        transfer.managerApproval?.status !== "APPROVED"
+      ) {
+        throw new ApiError(
+          StatusCodes.BAD_REQUEST,
+          "Both the player and the current club manager must accept this Live Transfer Market bid before final Admin approval.",
+        );
+      }
+    } else if (
       transfer.transferType === "CLUB_TO_CLUB" &&
       transfer.fromTeam &&
       transfer.status !== "MANAGER_APPROVED"
@@ -630,6 +651,21 @@ const approveTransferToDB = async (id: string, user: any) => {
     transfer.status = "APPROVED";
     transfer.approvedBy = userId as any;
     await transfer.save();
+
+    // 🌟 If Live Transfer Market, mark listing as TRANSFERRED and delist player
+    if (transfer.isLiveMarket) {
+      await LiveTransferMarket.updateMany(
+        { player: userDetails._id, status: { $in: ["ACTIVE", "PENDING_TRANSFER"] } },
+        {
+          status: "TRANSFERRED",
+          transferredAt: new Date(),
+          lastTransferId: transfer._id,
+        }
+      );
+      userDetails.isLiveTransferListed = false;
+      userDetails.liveTransferListingId = null as any;
+      await userDetails.save();
+    }
 
     // 1.3 Notify Buying Club Manager
     await NotificationQueueHelper.sendNotification(
@@ -1034,24 +1070,39 @@ const getManagerTransferRequestsFromDB = async (
 };
 
 const getTransferOverviewFromDB = async () => {
-  const [total, pending, managerApproved, approved, rejected, withdrawn] =
-    await Promise.all([
-      Transfer.countDocuments(),
-      Transfer.countDocuments({ status: "PENDING" }),
-      Transfer.countDocuments({ status: "MANAGER_APPROVED" }),
-      Transfer.countDocuments({ status: "APPROVED" }),
-      Transfer.countDocuments({ status: "REJECTED" }),
-      Transfer.countDocuments({ status: "WITHDRAWN" }),
-    ]);
+  const [
+    total,
+    pending,
+    managerApproved,
+    bothApproved,
+    approved,
+    rejected,
+    withdrawn,
+    liveMarket,
+    activeListings,
+  ] = await Promise.all([
+    Transfer.countDocuments(),
+    Transfer.countDocuments({ status: "PENDING" }),
+    Transfer.countDocuments({ status: "MANAGER_APPROVED" }),
+    Transfer.countDocuments({ status: "BOTH_APPROVED" }),
+    Transfer.countDocuments({ status: "APPROVED" }),
+    Transfer.countDocuments({ status: "REJECTED" }),
+    Transfer.countDocuments({ status: "WITHDRAWN" }),
+    Transfer.countDocuments({ isLiveMarket: true }),
+    LiveTransferMarket.countDocuments({ status: "ACTIVE" }),
+  ]);
 
   return {
     totalTransfers: total,
     pendingTransfers: pending,
     managerApprovedTransfers: managerApproved,
-    actionRequiredTransfers: pending + managerApproved,
+    bothApprovedTransfers: bothApproved,
+    actionRequiredTransfers: pending + managerApproved + bothApproved,
     approvedTransfers: approved,
     rejectedTransfers: rejected,
     withdrawnTransfers: withdrawn,
+    liveMarketTransfers: liveMarket,
+    activeLiveMarketListings: activeListings,
   };
 };
 

@@ -127,6 +127,31 @@ const deleteUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const socialLogin = catchAsync(async (req: Request, res: Response) => {
+  const result = await AuthService.socialLoginFromDB(req.body);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: result.isNewUser
+      ? "Account created and logged in successfully"
+      : "Login successful",
+    data: result,
+  });
+});
+
+const selectRole = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user as any;
+  const result = await AuthService.selectRoleToDB(user.id, req.body.role);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: "Role assigned successfully",
+    data: result,
+  });
+});
+
 export const AuthController = {
   verifyEmail,
   loginUser,
@@ -135,6 +160,7 @@ export const AuthController = {
   changePassword,
   newAccessToken,
   resendVerificationEmail,
-  // socialLogin,
+  socialLogin,
+  selectRole,
   deleteUser,
 };

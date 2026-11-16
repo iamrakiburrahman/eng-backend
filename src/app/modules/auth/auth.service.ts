@@ -21,6 +21,7 @@ import { Subscription } from "../subscription/subscription.model";
 import { NotificationQueueHelper } from "../../../helpers/bullMQ/bullHelper";
 import { NOTIFICATION_TYPE } from "../notification/notification.interface";
 import { checkIsProfileCompleted } from "../user/user.service";
+import firebaseAdmin from "../../../firebase/firebase";
 
 //login
 const loginUserFromDB = async (payload: ILoginData) => {
@@ -406,55 +407,203 @@ const resendVerificationEmailToDB = async (email: string) => {
   );
 };
 
-// social authentication
-// const socialLoginFromDB = async (payload: IUser) => {
+// social authentication (Firebase Google & Apple login)
+interface ISocialLoginPayload {
+  idToken: string;
+  fcmToken?: string | null;
+  firstName?: string;
+  lastName?: string;
+}
 
-//     const { appId, role } = payload;
+const socialLoginFromDB = async (payload: ISocialLoginPayload) => {
+  const { idToken, fcmToken, firstName: reqFirstName, lastName: reqLastName } = payload;
 
-//     const isExistUser = await User.findOne({ appId });
+  if (!idToken) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Firebase idToken is required");
+  }
 
-//     if (isExistUser) {
+  let decodedToken: any;
+  try {
+    decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
+  } catch (err: any) {
+    throw new ApiError(
+      StatusCodes.UNAUTHORIZED,
+      `Invalid or expired Firebase ID token: ${err.message || 'Verification failed'}`
+    );
+  }
 
-//         //create token
-//         const accessToken = jwtHelper.createToken(
-//             { id: isExistUser._id, role: isExistUser.role },
-//             config.jwt.jwt_secret as Secret,
-//             config.jwt.jwt_expire_in as string
-//         );
+  const { uid, email, name, picture, firebase } = decodedToken;
 
-//         //create token
-//         const refreshToken = jwtHelper.createToken(
-//             { id: isExistUser._id, role: isExistUser.role },
-//             config.jwt.jwtRefreshSecret as Secret,
-//             config.jwt.jwtRefreshExpiresIn as string
-//         );
+  if (!email) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "No email associated with this Google/Apple account"
+    );
+  }
 
-//         return { accessToken, refreshToken };
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const provider = firebase?.sign_in_provider || 'google.com';
+  const isApple = String(provider).toLowerCase().includes('apple');
 
-//     } else {
+  // Check if user exists by email, firebaseUid, or appId
+  let user: any = await User.findOne({
+    $or: [
+      { email: normalizedEmail },
+      { firebaseUid: uid },
+      { appId: uid },
+    ],
+  });
 
-//         const user = await User.create({ appId, role, verified: true });
-//         if (!user) {
-//             throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to created User")
-//         }
+  let isNewUser = false;
 
-//         //create token
-//         const accessToken = jwtHelper.createToken(
-//             { id: user._id, role: user.role },
-//             config.jwt.jwt_secret as Secret,
-//             config.jwt.jwt_expire_in as string
-//         );
+  if (!user) {
+    isNewUser = true;
 
-//         //create token
-//         const refreshToken = jwtHelper.createToken(
-//             { id: user._id, role: user.role },
-//             config.jwt.jwtRefreshSecret as Secret,
-//             config.jwt.jwtRefreshExpiresIn as string
-//         );
+    // Parse names
+    let firstName = reqFirstName?.trim() || "";
+    let lastName = reqLastName?.trim() || "";
 
-//         return { accessToken, refreshToken };
-//     }
-// }
+    if (!firstName && name) {
+      const parts = String(name).trim().split(" ");
+      firstName = parts[0] || "";
+      lastName = parts.slice(1).join(" ") || "";
+    }
+
+    if (!firstName) {
+      firstName = normalizedEmail.split("@")[0] || "User";
+    }
+
+    // Generate clean unique username
+    const baseUserName = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, "")}_${Math.floor(1000 + Math.random() * 9000)}`;
+
+    user = await User.create({
+      email: normalizedEmail,
+      userName: baseUserName,
+      firstName,
+      lastName,
+      profile: picture || undefined,
+      role: USER_ROLES.UNASSIGNED, // 👈 New accounts start as UNASSIGNED so user selects role
+      verified: true,              // 👈 Google / Apple accounts are pre-verified
+      authProvider: isApple ? "apple" : "google",
+      firebaseUid: uid,
+      appId: uid,
+      fcmToken: fcmToken ? String(fcmToken) : "",
+      status: "PENDING",
+    });
+  } else {
+    // Existing user: ensure verified is true, sync fcmToken, firebaseUid, and profile if missing
+    const updates: Record<string, any> = {};
+    if (!user.verified) updates.verified = true;
+    if (fcmToken && user.fcmToken !== fcmToken) updates.fcmToken = fcmToken;
+    if (!user.profile && picture) updates.profile = picture;
+    if (!user.firebaseUid) updates.firebaseUid = uid;
+    if (!user.authProvider) updates.authProvider = isApple ? "apple" : "google";
+
+    if (Object.keys(updates).length > 0) {
+      user = await User.findByIdAndUpdate(user._id, { $set: updates }, { new: true });
+    }
+  }
+
+  // Create JWT Tokens
+  const accessToken = jwtHelper.createToken(
+    {
+      id: user._id,
+      role: user.role,
+      email: user.email,
+      permissions: user.permissions || [],
+    },
+    config.jwt.jwt_secret as Secret,
+    config.jwt.jwt_expire_in as string
+  );
+
+  const refreshToken = jwtHelper.createToken(
+    {
+      id: user._id,
+      role: user.role,
+      email: user.email,
+      permissions: user.permissions || [],
+    },
+    config.jwt.jwtRefreshSecret as Secret,
+    config.jwt.jwtRefreshExpiresIn as string
+  );
+
+  const subscription = await Subscription.findOne({
+    user: user._id,
+    status: "active",
+  });
+
+  const isDetailsSubmitted = checkIsProfileCompleted(user);
+  const hasSelectedRole = user.role !== USER_ROLES.UNASSIGNED;
+
+  return {
+    accessToken,
+    refreshToken,
+    role: user.role,
+    isNewUser,
+    hasSelectedRole,
+    permissions: user.permissions || [],
+    profileStatus: user.status || "INCOMPLETE",
+    isDetailsSubmitted,
+    paymentStatus: Boolean(subscription),
+  };
+};
+
+// Select or assign role for UNASSIGNED accounts
+const selectRoleToDB = async (userId: string, requestedRole: USER_ROLES) => {
+  const allowedRoles = [
+    USER_ROLES.PLAYER,
+    USER_ROLES.MANAGER,
+    USER_ROLES.REFEREE,
+    USER_ROLES.OTHER_CLUBS,
+    USER_ROLES.TOURNAMENT_PLAYER,
+  ];
+
+  if (!allowedRoles.includes(requestedRole)) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `Invalid role. Allowed roles are: ${allowedRoles.join(", ")}`
+    );
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  user.role = requestedRole;
+  await user.save();
+
+  // Create fresh JWT tokens with the updated role
+  const accessToken = jwtHelper.createToken(
+    {
+      id: user._id,
+      role: user.role,
+      email: user.email,
+      permissions: user.permissions || [],
+    },
+    config.jwt.jwt_secret as Secret,
+    config.jwt.jwt_expire_in as string
+  );
+
+  const refreshToken = jwtHelper.createToken(
+    {
+      id: user._id,
+      role: user.role,
+      email: user.email,
+      permissions: user.permissions || [],
+    },
+    config.jwt.jwtRefreshSecret as Secret,
+    config.jwt.jwtRefreshExpiresIn as string
+  );
+
+  return {
+    accessToken,
+    refreshToken,
+    role: user.role,
+    hasSelectedRole: true,
+    isDetailsSubmitted: checkIsProfileCompleted(user),
+  };
+};
 
 // delete user
 // delete user
@@ -487,6 +636,7 @@ export const AuthService = {
   changePasswordToDB,
   newAccessTokenToUser,
   resendVerificationEmailToDB,
-  // socialLoginFromDB,
+  socialLoginFromDB,
+  selectRoleToDB,
   deleteUserFromDB,
 };

@@ -1,5 +1,5 @@
 import express, { NextFunction, Request, Response } from 'express';
-import { USER_ROLES } from '../../../enums/user';
+import { ROLE_GROUPS, USER_ROLES } from '../../../enums/user';
 import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import { AuthController } from './auth.controller';
@@ -65,10 +65,18 @@ router.post(
     AuthController.resendVerificationEmail
 );
 
-// router.post(
-//     '/social-login',
-//     AuthController.socialLogin
-// );
+router.post(
+    '/social-login',
+    validateRequest(AuthValidation.socialLoginZodSchema),
+    AuthController.socialLogin
+);
+
+router.post(
+    '/select-role',
+    auth(...ROLE_GROUPS.All),
+    validateRequest(AuthValidation.selectRoleZodSchema),
+    AuthController.selectRole
+);
 
 router.delete(
     '/delete-account',
