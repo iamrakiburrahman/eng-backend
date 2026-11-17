@@ -1,7 +1,7 @@
 import express from 'express';
 import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
-import { USER_ROLES } from '../../../enums/user';
+import { ROLE_GROUPS, USER_ROLES } from '../../../enums/user';
 import { LiveTransferMarketController } from './liveTransferMarket.controller';
 import { LiveTransferMarketValidation } from './liveTransferMarket.validation';
 
@@ -47,7 +47,7 @@ router.post(
 // 6. Player / Parent Consent Response (Accept / Reject)
 router.patch(
   '/:id/player-respond',
-  auth(USER_ROLES.PLAYER, USER_ROLES.UNASSIGNED, USER_ROLES.OTHER_CLUBS),
+  auth(...ROLE_GROUPS.All),
   validateRequest(LiveTransferMarketValidation.respondTransferZodSchema),
   LiveTransferMarketController.respondByPlayer
 );
@@ -60,10 +60,10 @@ router.patch(
   LiveTransferMarketController.respondByManager
 );
 
-// 8. Offers Received by Player
+// 8. Offers Received by Player / Parent / Manager
 router.get(
   '/my-offers',
-  auth(USER_ROLES.PLAYER, USER_ROLES.UNASSIGNED, USER_ROLES.OTHER_CLUBS),
+  auth(...ROLE_GROUPS.All),
   LiveTransferMarketController.getMyOffers
 );
 

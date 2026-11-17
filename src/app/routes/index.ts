@@ -55,6 +55,7 @@ import { PromotionalZoneRoutes } from "../modules/promotionalZone/promotionalZon
 import { AppModalRoutes } from "../modules/appModal/appModal.route";
 import { BookAScoutRoutes } from "../modules/bookAScout/bookAScout.route";
 import { LiveTransferMarketRoutes } from "../modules/liveTransferMarket/liveTransferMarket.route";
+import { BannerRoutes } from "../modules/banner/banner.routes";
 
 const router = express.Router();
 
@@ -125,6 +126,9 @@ const apiRoutes = [
     { path: "/app-modal", route: AppModalRoutes },
     { path: "/app-popup", route: AppModalRoutes },
     { path: "/book-a-scout", route: BookAScoutRoutes },
+    { path: "/banner", route: BannerRoutes },
+    { path: "/banners", route: BannerRoutes },
+    { path: "/section-banner", route: BannerRoutes },
 ]
 
 apiRoutes.forEach(route => router.use(route.path, route.route));

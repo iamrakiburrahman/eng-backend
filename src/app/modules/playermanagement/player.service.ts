@@ -13,6 +13,7 @@ import { PlayerDashboardService } from "../playerDashboard/playerDashboard.servi
 import { isPremiumPlayerPackage } from "../../../helpers/packageHelper";
 import { getBatchPlayerStatsSummary } from "../../../helpers/playerStatsHelper";
 import { PlayerEconomy } from "../coinAndBudget/playerEconomySchema.model";
+import { LiveTransferMarket } from "../liveTransferMarket/liveTransferMarket.model";
 import pick, {
   USER_ADMIN_EDITABLE_FIELDS,
   USER_SELF_EDITABLE_FIELDS,
@@ -124,7 +125,7 @@ export const getMyPlayersFromDB = async (parentId: string) => {
 
   const playerIds = players.map((player) => player._id);
 
-  const [subscriptions, statsMap] = await Promise.all([
+  const [subscriptions, statsMap, activeListings] = await Promise.all([
     Subscription.find({
       user: { $in: playerIds },
       status: "active",
@@ -133,7 +134,15 @@ export const getMyPlayersFromDB = async (parentId: string) => {
       .populate("package")
       .lean(),
     getBatchPlayerStatsSummary(playerIds),
+    LiveTransferMarket.find({
+      player: { $in: playerIds },
+      status: "ACTIVE",
+    }).lean(),
   ]);
+
+  const activeListingMap = new Set(
+    activeListings.map((l: any) => l.player?.toString())
+  );
 
   const subscriptionMap = new Map();
   subscriptions.forEach((sub: any) => {
@@ -160,6 +169,10 @@ export const getMyPlayersFromDB = async (parentId: string) => {
         matchesPlayed: 0,
       };
 
+      const isListedOnMarket =
+        activeListingMap.has(player._id.toString()) ||
+        Boolean(player.isLiveTransferListed);
+
       return {
         ...player,
         isSubscribed: Boolean(activeSubscription || player.isSubscribed),
@@ -169,6 +182,8 @@ export const getMyPlayersFromDB = async (parentId: string) => {
         activePackage: activeSubscription?.package || null,
         isPremium: Boolean(isPremium),
         stats: playerStats,
+        isListedOnMarket,
+        isLiveTransferListed: isListedOnMarket,
       };
     })
   );
@@ -203,7 +218,7 @@ const getPlayerByIdFromDB = async (parentId: string, playerId: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, "Player profile not found");
   }
 
-  const [activeSubscription, stats] = await Promise.all([
+  const [activeSubscription, stats, activeListing] = await Promise.all([
     Subscription.findOne({
       user: player._id,
       status: "active",
@@ -213,10 +228,17 @@ const getPlayerByIdFromDB = async (parentId: string, playerId: string) => {
       .lean(),
 
     PlayerDashboardService.getPlayerDashboardFromDB(player._id.toString()),
+
+    LiveTransferMarket.findOne({
+      player: player._id,
+      status: "ACTIVE",
+    }).lean(),
   ]);
 
   const pkg: any = activeSubscription?.package;
   const isPremium = await isPremiumPlayerPackage(pkg);
+  const isListedOnMarket =
+    Boolean(activeListing) || Boolean(player.isLiveTransferListed);
 
   return {
     ...player,
@@ -229,6 +251,8 @@ const getPlayerByIdFromDB = async (parentId: string, playerId: string) => {
     activePackage: activeSubscription?.package || null,
     isPremium,
     stats: isPremium ? stats.stats : null,
+    isListedOnMarket,
+    isLiveTransferListed: isListedOnMarket,
   };
 };
 

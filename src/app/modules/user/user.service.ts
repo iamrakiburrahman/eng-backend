@@ -18,6 +18,7 @@ import { isPremiumPlayerPackage, isUserPremiumPlayer } from "../../../helpers/pa
 import { recordCoinTransaction } from "../../../helpers/coinLedgerHelper";
 import { COIN_TRANSACTION_CATEGORY } from "../coinTransaction/coinTransaction.interface";
 import { carryForwardPlayerStats } from "../../../helpers/playerTransferStatsHelper";
+import { LiveTransferMarket } from "../liveTransferMarket/liveTransferMarket.model";
 import pick, { USER_SELF_EDITABLE_FIELDS } from "../../../shared/pick";
 
 const ALLOWED_PUBLIC_SIGNUP_ROLES: USER_ROLES[] = [
@@ -214,6 +215,19 @@ const getUserProfileFromDB = async (user: JwtPayload) => {
   const pkg: any = subscription?.package;
   const isPremium = await isPremiumPlayerPackage(pkg);
 
+  let isListedOnMarket = false;
+  if (
+    isExistUser.role === USER_ROLES.PLAYER ||
+    isExistUser.role === USER_ROLES.OTHER_CLUBS ||
+    isExistUser.role === USER_ROLES.TOURNAMENT_PLAYER
+  ) {
+    const activeListing = await LiveTransferMarket.findOne({
+      player: id,
+      status: "ACTIVE",
+    }).lean();
+    isListedOnMarket = Boolean(activeListing || isExistUser.isLiveTransferListed);
+  }
+
   return {
     _id: isExistUser._id,
     email: isExistUser.email,
@@ -229,6 +243,8 @@ const getUserProfileFromDB = async (user: JwtPayload) => {
     phone: isExistUser.phone || null,
     status: userDetails?.status || "PENDING",
     permissions: isExistUser.permissions || [],
+    isListedOnMarket,
+    isLiveTransferListed: isListedOnMarket,
 
     // Coin, Reward Points & Wallet Balance
     engCoine: isExistUser.engCoine || 0,
@@ -457,7 +473,7 @@ const updatePlayerByUserId = async (userId: string, payload: any) => {
 };
 
 const getPlayerByUserId = async (userId: string) => {
-  const [result, activeSub, stats] = await Promise.all([
+  const [result, activeSub, stats, activeListing] = await Promise.all([
     User.findById(userId)
       .populate({
         path: "selectTeam",
@@ -472,6 +488,10 @@ const getPlayerByUserId = async (userId: string) => {
       .populate("package")
       .lean(),
     getPlayerStatsSummary(userId),
+    LiveTransferMarket.findOne({
+      player: userId,
+      status: "ACTIVE",
+    }).lean(),
   ]);
 
   if (!result) {
@@ -481,11 +501,16 @@ const getPlayerByUserId = async (userId: string) => {
   const isDetailsSubmitted = checkIsProfileCompleted(result);
   const pkg: any = activeSub?.package;
   const isPremium = await isPremiumPlayerPackage(pkg);
+  const isListedOnMarket = Boolean(
+    activeListing || (result as any).isLiveTransferListed
+  );
 
   return {
     ...result,
     userId: result._id,
     jerseyNumber: result.jerseyNumber || null,
+    isListedOnMarket,
+    isLiveTransferListed: isListedOnMarket,
     activeSubscription: activeSub || null,
     activePackage: activeSub?.package || null,
     isPremium,

@@ -19,12 +19,23 @@ const resolveTargetPlayerId = async (
   userRole: string,
   requestedPlayerId?: string
 ): Promise<string> => {
+  const userStrId = userId.toString();
+  const userObjId = mongoose.Types.ObjectId.isValid(userStrId)
+    ? new mongoose.Types.ObjectId(userStrId)
+    : null;
+
   if (requestedPlayerId) {
     if (userRole === USER_ROLES.ADMIN || userRole === USER_ROLES.SUPER_ADMIN) {
       return requestedPlayerId;
     }
     // Check if requested player belongs to caller as parent
-    const child = await User.findOne({ _id: requestedPlayerId, parentId: userId });
+    const child = await User.findOne({
+      _id: requestedPlayerId,
+      $or: [
+        { parentId: userStrId },
+        ...(userObjId ? [{ parentId: userObjId }] : []),
+      ],
+    });
     if (child) {
       return child._id.toString();
     }
@@ -38,7 +49,12 @@ const resolveTargetPlayerId = async (
   }
 
   // If no playerId passed, check if caller is a parent with child player
-  const child = await User.findOne({ parentId: userId });
+  const child = await User.findOne({
+    $or: [
+      { parentId: userStrId },
+      ...(userObjId ? [{ parentId: userObjId }] : []),
+    ],
+  });
   if (child) {
     return child._id.toString();
   }
@@ -785,40 +801,115 @@ const respondByManagerToDB = async (
   };
 };
 
-// 8. GET OFFERS RECEIVED BY PLAYER (PLAYER / PARENT)
+// 8. GET OFFERS RECEIVED (SMART FOR PLAYER, PARENT, AND MANAGER)
 const getMyOffersFromDB = async (userId: string, userRole: string, playerId?: string) => {
-  const targetPlayerId = await resolveTargetPlayerId(
-    userId,
-    userRole,
-    playerId
-  );
+  const userStrId = userId.toString();
+  const userObjId = mongoose.Types.ObjectId.isValid(userStrId)
+    ? new mongoose.Types.ObjectId(userStrId)
+    : null;
 
-  const offers = await Transfer.find({
-    player: targetPlayerId,
-    isLiveMarket: true,
-  })
-    .sort({ createdAt: -1 })
-    .populate('toTeam', 'teamName logo clubCode')
-    .populate('fromTeam', 'teamName logo clubCode')
-    .populate('requestedBy', 'firstName lastName profile email');
+  // 1. If caller is a MANAGER:
+  if (userRole === USER_ROLES.MANAGER) {
+    // Find all teams managed by this manager
+    const managerTeams = await ManagerTeam.find({
+      $or: [
+        { manager: userStrId },
+        ...(userObjId ? [{ manager: userObjId }] : []),
+      ],
+    });
+    const teamIds = managerTeams.map((mt) => mt.team);
 
-  return offers;
-};
+    if (!teamIds.length) {
+      return [];
+    }
 
-// 9. GET LIVE MARKET BIDS FOR SELLING CLUB (SELLING MANAGER)
-const getSellingRequestsFromDB = async (userId: string) => {
-  const managerTeam = await ManagerTeam.findOne({ manager: userId });
-  if (!managerTeam) {
-    return [];
+    // Return all incoming bids received for players belonging to this manager's team
+    return await Transfer.find({
+      fromTeam: { $in: teamIds },
+      isLiveMarket: true,
+    })
+      .sort({ createdAt: -1 })
+      .populate('player', 'firstName lastName userName email profile position engCoine marketValue')
+      .populate('toTeam', 'teamName logo clubCode')
+      .populate('fromTeam', 'teamName logo clubCode')
+      .populate('requestedBy', 'firstName lastName profile email');
   }
 
-  const requests = await Transfer.find({
-    fromTeam: managerTeam.team,
+  // 2. If specific playerId query param is passed:
+  if (playerId) {
+    const targetPlayerId = await resolveTargetPlayerId(userId, userRole, playerId);
+    return await Transfer.find({
+      player: targetPlayerId,
+      isLiveMarket: true,
+    })
+      .sort({ createdAt: -1 })
+      .populate('player', 'firstName lastName userName email profile position engCoine marketValue')
+      .populate('toTeam', 'teamName logo clubCode')
+      .populate('fromTeam', 'teamName logo clubCode')
+      .populate('requestedBy', 'firstName lastName profile email');
+  }
+
+  // 3. Check if caller is a PARENT (has children in User model)
+  const children = await User.find({
+    $or: [
+      { parentId: userStrId },
+      ...(userObjId ? [{ parentId: userObjId }] : []),
+    ],
+  }).select('_id');
+
+  if (children.length > 0) {
+    const childIds = children.map((c) => c._id);
+    return await Transfer.find({
+      player: { $in: childIds },
+      isLiveMarket: true,
+    })
+      .sort({ createdAt: -1 })
+      .populate('player', 'firstName lastName userName email profile position engCoine marketValue')
+      .populate('toTeam', 'teamName logo clubCode')
+      .populate('fromTeam', 'teamName logo clubCode')
+      .populate('requestedBy', 'firstName lastName profile email');
+  }
+
+  // 4. Default: caller is the player themself
+  return await Transfer.find({
+    player: userObjId || userStrId,
     isLiveMarket: true,
   })
     .sort({ createdAt: -1 })
     .populate('player', 'firstName lastName userName email profile position engCoine marketValue')
     .populate('toTeam', 'teamName logo clubCode')
+    .populate('fromTeam', 'teamName logo clubCode')
+    .populate('requestedBy', 'firstName lastName profile email');
+};
+
+// 9. GET LIVE MARKET BIDS FOR SELLING CLUB (SELLING MANAGER)
+const getSellingRequestsFromDB = async (userId: string) => {
+  const userStrId = userId.toString();
+  const userObjId = mongoose.Types.ObjectId.isValid(userStrId)
+    ? new mongoose.Types.ObjectId(userStrId)
+    : null;
+
+  const managerTeams = await ManagerTeam.find({
+    $or: [
+      { manager: userStrId },
+      ...(userObjId ? [{ manager: userObjId }] : []),
+    ],
+  });
+
+  if (!managerTeams.length) {
+    return [];
+  }
+
+  const teamIds = managerTeams.map((mt) => mt.team);
+
+  const requests = await Transfer.find({
+    fromTeam: { $in: teamIds },
+    isLiveMarket: true,
+  })
+    .sort({ createdAt: -1 })
+    .populate('player', 'firstName lastName userName email profile position engCoine marketValue')
+    .populate('toTeam', 'teamName logo clubCode')
+    .populate('fromTeam', 'teamName logo clubCode')
     .populate('requestedBy', 'firstName lastName profile email');
 
   return requests;
@@ -826,8 +917,13 @@ const getSellingRequestsFromDB = async (userId: string) => {
 
 // 10. GET LIVE MARKET BIDS SENT BY BUYING CLUB (BUYING MANAGER)
 const getBuyingRequestsFromDB = async (userId: string) => {
+  const userStrId = userId.toString();
+  const userObjId = mongoose.Types.ObjectId.isValid(userStrId)
+    ? new mongoose.Types.ObjectId(userStrId)
+    : null;
+
   const requests = await Transfer.find({
-    requestedBy: userId,
+    requestedBy: { $in: [userStrId, ...(userObjId ? [userObjId] : [])] },
     isLiveMarket: true,
   })
     .sort({ createdAt: -1 })

@@ -12,6 +12,7 @@ import ApiError from "../../../errors/ApiErrors";
 import { Subscription } from "../subscription/subscription.model";
 import { isPremiumPlayerPackage } from "../../../helpers/packageHelper";
 import { getPlayerStatsSummary } from "../../../helpers/playerStatsHelper";
+import { LiveTransferMarket } from "../liveTransferMarket/liveTransferMarket.model";
 
 const getPlayerDashboardFromDB = async (playerId: string) => {
   const playerObjectId = new mongoose.Types.ObjectId(playerId);
@@ -60,20 +61,29 @@ const getPlayerDashboardFromDB = async (playerId: string) => {
     .limit(10)
     .populate("match team");
 
-  const activeSub = await Subscription.findOne({
-    user: player._id,
-    status: "active",
-  } as any)
-    .sort({ createdAt: -1 })
-    .populate("package")
-    .lean();
+  const [activeSub, activeListing] = await Promise.all([
+    Subscription.findOne({
+      user: player._id,
+      status: "active",
+    } as any)
+      .sort({ createdAt: -1 })
+      .populate("package")
+      .lean(),
+    LiveTransferMarket.findOne({
+      player: player._id,
+      status: "ACTIVE",
+    }).lean(),
+  ]);
 
   const pkg: any = activeSub?.package;
   const isPremium = await isPremiumPlayerPackage(pkg);
+  const isListedOnMarket = Boolean(activeListing || player.isLiveTransferListed);
 
   playerData.isSubscribed = Boolean(activeSub || player.isSubscribed);
   playerData.hasAccess = Boolean(activeSub || player.hasAccess);
   playerData.isPaid = Boolean(activeSub || player.isSubscribed || player.hasAccess);
+  playerData.isListedOnMarket = isListedOnMarket;
+  playerData.isLiveTransferListed = isListedOnMarket;
 
   if (!isPremium) {
     playerData.engCoine = null;
