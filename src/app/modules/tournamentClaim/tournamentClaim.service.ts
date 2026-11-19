@@ -229,15 +229,34 @@ const reviewClaimInDB = async (
 
     const pointsToAward = rewardConfig ? rewardConfig.points : 0;
 
-    // 💰 Credit reward points to user account
-    await User.findByIdAndUpdate(claim.user, {
-      $inc: { rewardPoint: pointsToAward },
-    });
+    // 🔒 Concurrency-safe atomic claim approval to prevent double-crediting
+    const updatedClaim = await TournamentClaim.findOneAndUpdate(
+      { _id: claimId, status: 'pending' },
+      {
+        status: 'approved',
+        pointsAwarded: pointsToAward,
+        approvedBy: adminId as any,
+      },
+      { new: true }
+    );
+
+    if (!updatedClaim) {
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        'Claim has already been reviewed, approved, or rejected.'
+      );
+    }
+
+    // 💰 Credit reward points to user account only after atomic claim lock
+    if (pointsToAward > 0) {
+      await User.findByIdAndUpdate(claim.user, {
+        $inc: { rewardPoint: pointsToAward },
+      });
+    }
 
     claim.status = 'approved';
     claim.pointsAwarded = pointsToAward;
     claim.approvedBy = adminId as any;
-    await claim.save();
 
     // Send Notification to User via background queue
     await NotificationQueueHelper.sendNotification(

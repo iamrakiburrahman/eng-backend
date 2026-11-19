@@ -5,6 +5,7 @@ import { UserValidation } from "./user.validation";
 import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
 import fileUploadHandler from "../../middlewares/fileUploaderHandler";
+import { authLimiter } from "../../middlewares/rateLimiter";
 const router = express.Router();
 
 router.get("/profile", auth(...ROLE_GROUPS.All), UserController.getUserProfile);
@@ -19,6 +20,7 @@ router.post(
 router
   .route("/")
   .post(
+    authLimiter,
     validateRequest(UserValidation.createUserZodSchema),
     UserController.createUser,
   )

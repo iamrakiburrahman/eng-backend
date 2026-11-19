@@ -36,7 +36,7 @@ const getAllAppModalsFromDB = async (
   query: Record<string, unknown>
 ): Promise<{ data: IAppModal[]; total: number; page: number; limit: number; totalPages: number }> => {
   const page = Math.max(1, Number(query.page || query.pageNumber) || 1);
-  const limit = Math.max(1, Number(query.limit) || 10);
+  const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
   const skip = (page - 1) * limit;
 
   const filter: Record<string, any> = {};

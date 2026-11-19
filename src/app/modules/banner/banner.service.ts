@@ -59,8 +59,8 @@ const getAllBannerFromDB = async (
     conditions.status = status;
   }
 
-  const pageNum = Number(page) || 1;
-  const limitNum = Number(limit) || 20;
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.max(1, Math.min(100, Number(limit) || 20));
   const skip = (pageNum - 1) * limitNum;
 
   const sortConditions: any = {};

@@ -313,6 +313,22 @@ const updateChieldInfoToDB = async (id: string, payload: any, currentUser?: any)
     ) {
       safePayload.selectTeam = null;
     }
+
+    // 🔒 Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
+    const callerRole = currentUser?.role;
+    const isSuperOrAdmin =
+      callerRole === USER_ROLES.SUPER_ADMIN || callerRole === USER_ROLES.ADMIN;
+    if (
+      !isSuperOrAdmin &&
+      isExistUser.selectTeam &&
+      safePayload.selectTeam &&
+      safePayload.selectTeam.toString() !== isExistUser.selectTeam.toString()
+    ) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Player is already affiliated with a club. Club changes must be processed through the Transfer Market."
+      );
+    }
   }
 
   // If document files were uploaded in this request:
@@ -450,6 +466,18 @@ const updatePlayerByUserId = async (userId: string, payload: any) => {
       !Types.ObjectId.isValid(safePayload.selectTeam)
     ) {
       safePayload.selectTeam = null;
+    }
+
+    // 🔒 Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
+    if (
+      isExist.selectTeam &&
+      safePayload.selectTeam &&
+      safePayload.selectTeam.toString() !== isExist.selectTeam.toString()
+    ) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Player is already affiliated with a club. Club changes must be processed through the Transfer Market."
+      );
     }
   }
 
