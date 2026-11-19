@@ -9,16 +9,3 @@ declare global {
     }
   }
 }
-
-declare module "helmet" {
-  import { RequestHandler } from "express";
-
-  interface HelmetOptions {
-    crossOriginResourcePolicy?: { policy?: string };
-    contentSecurityPolicy?: boolean | Record<string, any>;
-    [key: string]: any;
-  }
-
-  function helmet(options?: HelmetOptions): RequestHandler;
-  export default helmet;
-}
