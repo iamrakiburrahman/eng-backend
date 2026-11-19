@@ -429,10 +429,10 @@ const getAllVotingPollsFromDB = async (
       .populate("league", "leagueName season ageGroup")
       .populate(
         "nominees.referee",
-        "firstName lastName profile userName email phone role",
+        "firstName lastName profile userName role",
       )
       .populate("winner", "firstName lastName profile userName")
-      .populate("createdBy", "firstName lastName email")
+      .populate("createdBy", "firstName lastName")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -562,10 +562,10 @@ const getSingleVotingPollFromDB = async (
     .populate("league", "leagueName season ageGroup")
     .populate(
       "nominees.referee",
-      "firstName lastName profile userName email phone role",
+      "firstName lastName profile userName role",
     )
     .populate("winner", "firstName lastName profile userName")
-    .populate("createdBy", "firstName lastName email")
+    .populate("createdBy", "firstName lastName")
     .lean();
 
   if (!poll) {
@@ -689,7 +689,7 @@ const getActiveVotingPollsForClientFromDB = async (
     .populate("league", "leagueName season ageGroup")
     .populate(
       "nominees.referee",
-      "firstName lastName profile userName email phone role",
+      "firstName lastName profile userName role",
     )
     .sort({ isFeatured: -1, startDate: 1 })
     .lean();
@@ -1036,7 +1036,7 @@ const castVoteInDB = async (
     .populate("league", "leagueName season ageGroup")
     .populate(
       "nominees.referee",
-      "firstName lastName profile userName email phone role",
+      "firstName lastName profile userName role",
     )
     .lean();
 
@@ -1180,7 +1180,7 @@ const updateVotingPollInDB = async (
     .populate("league", "leagueName season ageGroup")
     .populate(
       "nominees.referee",
-      "firstName lastName profile userName email phone role",
+      "firstName lastName profile userName role",
     )
     .populate("winner", "firstName lastName profile userName");
 
@@ -1261,7 +1261,7 @@ const toggleVotingStatusInDB = async (
     .populate("league", "leagueName season ageGroup")
     .populate(
       "nominees.referee",
-      "firstName lastName profile userName email phone role",
+      "firstName lastName profile userName role",
     )
     .populate("winner", "firstName lastName profile userName");
 
@@ -1277,7 +1277,7 @@ const getVotingLeaderboardOrResultsFromDB = async (
     .populate("league", "leagueName season ageGroup")
     .populate(
       "nominees.referee",
-      "firstName lastName profile userName email phone role",
+      "firstName lastName profile userName role",
     )
     .populate("winner", "firstName lastName profile userName")
     .lean();
@@ -1579,7 +1579,7 @@ const getEligibleRefereesListFromDB = async (
   }
 
   const referees = await User.find(filter)
-    .select("_id firstName lastName userName email phone profile")
+    .select("_id firstName lastName userName profile")
     .lean();
 
   // Enrich with match count

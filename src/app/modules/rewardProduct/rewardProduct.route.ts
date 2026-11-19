@@ -2,6 +2,7 @@ import express from 'express';
 import { ROLE_GROUPS, USER_ROLES } from '../../../enums/user';
 import auth from '../../middlewares/auth';
 import fileUploadHandler from '../../middlewares/fileUploaderHandler';
+import { authLimiter } from '../../middlewares/rateLimiter';
 import { RewardProductController } from './rewardProduct.controller';
 
 
@@ -11,6 +12,7 @@ const router = express.Router();
 router
   .route('/redeem-coffee')
   .post(
+    authLimiter,
     auth(...ROLE_GROUPS.All),
     RewardProductController.redeemCoffeeReward
   );
@@ -28,7 +30,10 @@ router
 // OVERVIEW / SUMMARY ANALYTICS (DEDICATED API)
 router
   .route('/overview')
-  .get(RewardProductController.getRewardProductsOverview);
+  .get(
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+    RewardProductController.getRewardProductsOverview
+  );
 
 // SINGLE + UPDATE + DELETE
 router

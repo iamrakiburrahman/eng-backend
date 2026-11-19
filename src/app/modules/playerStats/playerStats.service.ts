@@ -48,7 +48,7 @@ const getAllPlayerStatsFromDB = async (user?: JwtPayload | null) => {
   }
 
   return await PlayerStats.find(filter)
-    .populate('player', 'name image email')
+    .populate('player', 'name image firstName lastName profile')
     .populate('team', 'teamName teamLogo')
     .sort({ goals: -1, assists: -1 });
 };
@@ -69,7 +69,7 @@ const getSinglePlayerStatsFromDB = async (playerId: string, user?: JwtPayload | 
 
   const [result, stats] = await Promise.all([
     PlayerStats.findOne({ player: playerId })
-      .populate('player', 'name image email firstName lastName profile')
+      .populate('player', 'name image firstName lastName profile')
       .populate('team', 'teamName teamLogo shortName'),
     getPlayerStatsSummary(playerId),
   ]);

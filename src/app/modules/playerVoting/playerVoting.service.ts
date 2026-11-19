@@ -356,7 +356,7 @@ const getAllVotingPollsFromDB = async (
       .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
       .populate('nominees.team', 'teamName logo')
       .populate('winner', 'firstName lastName profile userName')
-      .populate('createdBy', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -476,7 +476,7 @@ const getSingleVotingPollFromDB = async (
     .populate('nominees.player', 'firstName lastName profile userName position selectTeam')
     .populate('nominees.team', 'teamName logo')
     .populate('winner', 'firstName lastName profile userName')
-    .populate('createdBy', 'firstName lastName email')
+    .populate('createdBy', 'firstName lastName')
     .lean();
 
   if (!poll) {

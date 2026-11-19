@@ -2,6 +2,9 @@ import { JwtPayload } from "jsonwebtoken";
 import { Package } from "../package/package.model";
 import { ISubscription } from "./subscription.interface";
 import { Subscription } from "./subscription.model";
+import ApiError from "../../../errors/ApiErrors";
+import { StatusCodes } from "http-status-codes";
+import { USER_ROLES } from "../../../enums/user";
 
 
 const subscriptionDetailsFromDB = async (user: JwtPayload): Promise<{ subscription: ISubscription | {} }> => {
@@ -17,7 +20,20 @@ const subscriptionDetailsFromDB = async (user: JwtPayload): Promise<{ subscripti
     return { subscription };
 };
 
-const companySubscriptionDetailsFromDB = async (id: string): Promise<{ subscription: ISubscription | {} }> => {
+const companySubscriptionDetailsFromDB = async (
+    id: string,
+    user?: JwtPayload | null
+): Promise<{ subscription: ISubscription | {} }> => {
+    if (user && user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.SUPER_ADMIN) {
+        const requesterId = (user.id || user._id)?.toString();
+        if (requesterId !== id.toString()) {
+            throw new ApiError(
+                StatusCodes.FORBIDDEN,
+                "You are not authorized to view subscription details of other accounts."
+            );
+        }
+    }
+
     const subscription = await Subscription.findOne({ user: id, status: "active" })
         .sort({ createdAt: -1 })
         .populate("package", "title credit")

@@ -243,13 +243,17 @@ const updateJerseyNumber = catchAsync(async (req: Request, res: Response) => {
     }
   }
 
-  const result = await UserManagementService.updateJerseyNumberToDB(id, {
-    jerseyNumber:
-      jerseyNumber !== undefined && jerseyNumber !== null
-        ? jerseyNumber.toString().trim()
-        : undefined,
-    profile: profile || undefined,
-  });
+  const result = await UserManagementService.updateJerseyNumberToDB(
+    id,
+    {
+      jerseyNumber:
+        jerseyNumber !== undefined && jerseyNumber !== null
+          ? jerseyNumber.toString().trim()
+          : undefined,
+      profile: profile || undefined,
+    },
+    req.user
+  );
 
   sendResponse(res, {
     success: true,

@@ -26,7 +26,11 @@ router.patch(
 );
 
 // EVENT ANALYTICS
-router.get('/analytics', EventController.getEventAnalytics);
+router.get(
+  '/analytics',
+  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+  EventController.getEventAnalytics
+);
 
 // SINGLE + UPDATE + DELETE
 router

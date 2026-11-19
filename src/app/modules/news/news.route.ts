@@ -16,7 +16,11 @@ router
   )
   .get(auth(), NewsController.getAllNews);
 router.get("/public-news", NewsController.getPublicNews);
-router.get("/analytics", NewsController.getNewsAnalytics);
+router.get(
+  "/analytics",
+  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+  NewsController.getNewsAnalytics
+);
 router.patch(
   "/reorder",
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),

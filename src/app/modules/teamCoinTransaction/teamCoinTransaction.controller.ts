@@ -7,7 +7,8 @@ const getTeamCoinHistory = catchAsync(async (req, res) => {
   const teamId = req.params.teamId as string;
   const result = await TeamCoinTransactionService.getTeamCoinHistoryFromDB(
     teamId,
-    req.query
+    req.query,
+    req.user
   );
 
   sendResponse(res, {

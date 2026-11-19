@@ -6,21 +6,42 @@ import { TEAM_COIN_CATEGORY } from "./teamCoinTransaction.interface";
 import { recordTeamCoinTransaction } from "../../../helpers/teamCoinLedgerHelper";
 import ApiError from "../../../errors/ApiErrors";
 import { StatusCodes } from "http-status-codes";
+import { USER_ROLES } from "../../../enums/user";
 
 const getTeamCoinHistoryFromDB = async (
   teamId: string,
-  query: Record<string, any>
+  query: Record<string, any>,
+  user?: any
 ) => {
   if (!mongoose.Types.ObjectId.isValid(teamId)) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid Team ID");
   }
 
   const teamDoc = await Team.findById(teamId).select(
-    "teamName shortName teamLogo coin marketValue ageGroup"
+    "teamName shortName teamLogo coin marketValue ageGroup creator"
   ).lean();
 
   if (!teamDoc) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Team not found");
+  }
+
+  // Access control: Only ADMIN, SUPER_ADMIN, or the assigned Manager/creator of the team can view coin history
+  if (user && user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.SUPER_ADMIN) {
+    const requesterId = (user.id || user._id)?.toString();
+    const isManager = await ManagerTeam.findOne({
+      manager: requesterId,
+      team: teamId,
+    });
+    const isCreator =
+      (teamDoc as any).creator &&
+      (teamDoc as any).creator.toString() === requesterId;
+
+    if (!isManager && !isCreator) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to view coin history for this team."
+      );
+    }
   }
 
   const page = Math.max(1, Number(query.page) || 1);

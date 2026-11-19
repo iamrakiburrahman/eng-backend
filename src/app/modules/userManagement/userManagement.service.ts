@@ -5,6 +5,7 @@ import QueryBuilder from "../../../util/queryBuilder";
 import { User } from "../user/user.model";
 import { Subscription } from "../subscription/subscription.model";
 import { ManagerTeam } from "../managerTeam/managerTeam.model";
+import { Match } from "../match/match.model";
 import { PlayerEconomy } from "../coinAndBudget/playerEconomySchema.model";
 import { carryForwardPlayerStats } from "../../../helpers/playerTransferStatsHelper";
 
@@ -869,10 +870,48 @@ const getIncompleteUsersFromDB = async (query: Record<string, any>) => {
 const updateJerseyNumberToDB = async (
   userId: string,
   payload: { jerseyNumber?: string | null; profile?: string },
+  requesterUser?: any
 ) => {
-  const user = await User.findById(userId);
-  if (!user) {
+  const targetUser = await User.findById(userId);
+  if (!targetUser) {
     throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  if (requesterUser && requesterUser.role !== USER_ROLES.ADMIN && requesterUser.role !== USER_ROLES.SUPER_ADMIN) {
+    const requesterId = (requesterUser.id || requesterUser._id)?.toString();
+    const playerTeamId = targetUser.selectTeam ? targetUser.selectTeam.toString() : null;
+
+    if (!playerTeamId) {
+      throw new ApiError(StatusCodes.FORBIDDEN, "Player is not assigned to any team.");
+    }
+
+    if (requesterUser.role === USER_ROLES.MANAGER) {
+      const isManagerOfTeam = await ManagerTeam.findOne({
+        manager: requesterId,
+        team: playerTeamId,
+      });
+      if (!isManagerOfTeam) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You can only update details for players in your own team."
+        );
+      }
+    } else if (requesterUser.role === USER_ROLES.REFEREE) {
+      const assignedMatch = await Match.findOne({
+        referee: requesterId,
+        $or: [{ homeTeam: playerTeamId }, { awayTeam: playerTeamId }],
+      });
+      if (!assignedMatch) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You are not assigned to any match involving this player's team."
+        );
+      }
+      // Referees should not overwrite player avatar profile pictures
+      if (payload.profile) {
+        delete payload.profile;
+      }
+    }
   }
 
   const updateData: Record<string, any> = {};

@@ -12,6 +12,6 @@ router.route('/').get(auth(false), PlayerStatsController.getAllPlayerStats);
 router.route('/:playerId').get(auth(false), PlayerStatsController.getSinglePlayerStats);
 
 // ADMIN UPDATE
-router.route('/:playerId').patch(auth(...ROLE_GROUPS.All), PlayerStatsController.updatePlayerStats);
+router.route('/:playerId').patch(auth(...ROLE_GROUPS.ADMINS), PlayerStatsController.updatePlayerStats);
 
 export default router;

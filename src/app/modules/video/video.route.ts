@@ -30,7 +30,12 @@ router.route('/rearrange').patch(
 );
 
 // VIDEO ANALYTICS
-router.route('/analytics').get(VideoController.getVideoAnalytics);
+router
+  .route('/analytics')
+  .get(
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+    VideoController.getVideoAnalytics
+  );
 
 // SINGLE + UPDATE + DELETE
 router

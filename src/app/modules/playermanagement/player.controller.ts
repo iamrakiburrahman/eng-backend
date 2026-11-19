@@ -257,7 +257,7 @@ const deletePlayerByAdmin = catchAsync(async (req: Request, res: Response) => {
 const assignJerseyNumber = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { jerseyNumber } = req.body;
-  const result = await PlayerService.assignJerseyNumberToDB(id, jerseyNumber);
+  const result = await PlayerService.assignJerseyNumberToDB(id, jerseyNumber, req.user);
 
   sendResponse(res, {
     success: true,

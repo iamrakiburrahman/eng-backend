@@ -9,7 +9,7 @@ const router = express.Router();
 // GET ALL USERS
 router.get(
   "/",
-  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.MANAGER, USER_ROLES.OTHER_CLUBS),
+  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
   UserManagementController.getAllUsers
 );
 
@@ -59,7 +59,7 @@ router.patch(
 // GET USER ANALYTICS
 router.get(
   "/analytics",
-  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.MANAGER, USER_ROLES.OTHER_CLUBS),
+  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
   UserManagementController.getUserAnalytics
 );
 

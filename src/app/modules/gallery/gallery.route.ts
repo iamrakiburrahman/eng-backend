@@ -6,7 +6,11 @@ import { GalleryController } from './gallery.controller';
 
 const router = express.Router();
 
-router.get('/overview', GalleryController.getGalleryOverview);
+router.get(
+  '/overview',
+  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+  GalleryController.getGalleryOverview
+);
 
 router
   .route('/')

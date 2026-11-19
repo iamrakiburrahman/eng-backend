@@ -30,7 +30,11 @@ router
     )
     .get(auth(false), PackageController.getPackage)
 
-router.get("/overview", PackageController.getPackageOverview);
+router.get(
+  "/overview",
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  PackageController.getPackageOverview
+);
 
 router
     .route("/:id")

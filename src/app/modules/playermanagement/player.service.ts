@@ -14,6 +14,8 @@ import { isPremiumPlayerPackage } from "../../../helpers/packageHelper";
 import { getBatchPlayerStatsSummary } from "../../../helpers/playerStatsHelper";
 import { PlayerEconomy } from "../coinAndBudget/playerEconomySchema.model";
 import { LiveTransferMarket } from "../liveTransferMarket/liveTransferMarket.model";
+import { ManagerTeam } from "../managerTeam/managerTeam.model";
+import { Match } from "../match/match.model";
 import pick, {
   USER_ADMIN_EDITABLE_FIELDS,
   USER_SELF_EDITABLE_FIELDS,
@@ -932,11 +934,45 @@ const deletePlayerByAdminToDB = async (id: string) => {
 const assignJerseyNumberToDB = async (
   playerId: string,
   jerseyNumber: string | null,
+  requesterUser?: any
 ) => {
   const player = await User.findById(playerId);
 
   if (!player) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Player profile not found");
+  }
+
+  if (requesterUser && requesterUser.role !== USER_ROLES.ADMIN && requesterUser.role !== USER_ROLES.SUPER_ADMIN) {
+    const requesterId = (requesterUser.id || requesterUser._id)?.toString();
+    const playerTeamId = player.selectTeam ? player.selectTeam.toString() : null;
+
+    if (!playerTeamId) {
+      throw new ApiError(StatusCodes.FORBIDDEN, "Player is not assigned to any team.");
+    }
+
+    if (requesterUser.role === USER_ROLES.MANAGER) {
+      const isManagerOfTeam = await ManagerTeam.findOne({
+        manager: requesterId,
+        team: playerTeamId,
+      });
+      if (!isManagerOfTeam) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You can only assign jersey numbers to players in your own team."
+        );
+      }
+    } else if (requesterUser.role === USER_ROLES.REFEREE) {
+      const assignedMatch = await Match.findOne({
+        referee: requesterId,
+        $or: [{ homeTeam: playerTeamId }, { awayTeam: playerTeamId }],
+      });
+      if (!assignedMatch) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You are not assigned to any match involving this player's team."
+        );
+      }
+    }
   }
 
   const updatedPlayer = await User.findByIdAndUpdate(

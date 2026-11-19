@@ -254,6 +254,19 @@ const redeemCoffeeRewardInDB = async (
     }
   }
 
+  if (targetPlayerId && targetPlayerId.toString() !== userId.toString()) {
+    const isChild = await User.findOne({
+      _id: targetPlayerId,
+      parentId: userId,
+    });
+    if (!isChild) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        'You are not authorized to redeem rewards for this player.'
+      );
+    }
+  }
+
   const finalPlayerId = targetPlayerId || userId;
   if (!finalPlayerId) {
     throw new ApiError(
@@ -325,33 +338,39 @@ const redeemCoffeeRewardInDB = async (
   const currentCoins = Number(user.engCoine) || 0;
 
   // Unlimited redemptions permitted, but guard against rapid double-taps / concurrent scans within 10 seconds
-  if (!rewardProduct.redeemedUsers) {
-    rewardProduct.redeemedUsers = [];
-  }
+  const tenSecondsAgo = new Date(Date.now() - 10000);
+  const playerObjectId = new Types.ObjectId(finalPlayerId);
 
-  const tenSecondsAgo = Date.now() - 10000;
-  const hasRecentRedeem = rewardProduct.redeemedUsers.some(
-    (ru: any) =>
-      ru.user?.toString() === finalPlayerId.toString() &&
-      new Date(ru.redeemedAt).getTime() > tenSecondsAgo
+  const updatedProduct = await RewardProduct.findOneAndUpdate(
+    {
+      _id: rewardProduct._id,
+      redeemedUsers: {
+        $not: {
+          $elemMatch: {
+            user: playerObjectId,
+            redeemedAt: { $gt: tenSecondsAgo },
+          },
+        },
+      },
+    },
+    {
+      $push: {
+        redeemedUsers: {
+          user: playerObjectId,
+          redeemedAt: new Date(),
+          points: awardPoints,
+        },
+      },
+    },
+    { new: true }
   );
 
-  if (hasRecentRedeem) {
+  if (!updatedProduct) {
     throw new ApiError(
       StatusCodes.TOO_MANY_REQUESTS,
       "Duplicate scan detected. Please wait a few seconds before scanning again."
     );
   }
-
-  const playerObjectId = new Types.ObjectId(finalPlayerId);
-
-  rewardProduct.redeemedUsers.push({
-    user: playerObjectId,
-    redeemedAt: new Date(),
-    points: awardPoints,
-  });
-
-  await rewardProduct.save();
 
   // ADD (+) COINS & UPDATE MARKET VALUE FOR THE PLAYER THROUGH LEDGER
   if (awardPoints > 0) {

@@ -2,6 +2,7 @@ import express from 'express';
 import { ROLE_GROUPS } from '../../../enums/user';
 import auth from '../../middlewares/auth';
 import fileUploadHandler from '../../middlewares/fileUploaderHandler';
+import { trackingLimiter } from '../../middlewares/rateLimiter';
 import { AppModalController } from './appModal.controller';
 
 const router = express.Router();
@@ -11,8 +12,8 @@ const router = express.Router();
 router.get('/active', AppModalController.getActiveAppModal);
 
 // Analytics
-router.post('/:id/view', AppModalController.recordModalView);
-router.post('/:id/click', AppModalController.recordModalClick);
+router.post('/:id/view', trackingLimiter, AppModalController.recordModalView);
+router.post('/:id/click', trackingLimiter, AppModalController.recordModalClick);
 
 // 2. ADMIN MANAGEMENT ENDPOINTS
 router

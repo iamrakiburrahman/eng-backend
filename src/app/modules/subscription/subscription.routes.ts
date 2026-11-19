@@ -15,7 +15,7 @@ router.get("/details",
 );
 
 router.get("/:id", 
-    auth(USER_ROLES.PLAYER,USER_ROLES.REFEREE,USER_ROLES.MANAGER), 
+    auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.PLAYER, USER_ROLES.REFEREE, USER_ROLES.MANAGER), 
     SubscriptionController.companySubscriptionDetails
 )
 
