@@ -113,8 +113,7 @@ const createEvaluationIntoDB = async (payload: any, userRole?: string) => {
 
   const isAdmin =
     userRole === "ADMIN" ||
-    userRole === "SUPER_ADMIN" ||
-    payload.isAdminOverride;
+    userRole === "SUPER_ADMIN";
 
   if (!isAdmin && setting.isFeedbackWindowRestricted && setting.feedbackWindowHours > 0) {
     const finishTime = match.finishedAt || (match as any).updatedAt || match.matchDate;

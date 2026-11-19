@@ -1,6 +1,9 @@
 import { StatusCodes } from "http-status-codes";
 import catchAsync from "../../../shared/catchAsync";
 import sendResponse from "../../../shared/sendResponse";
+import ApiError from "../../../errors/ApiErrors";
+import { USER_ROLES } from "../../../enums/user";
+import { ManagerTeam } from "../managerTeam/managerTeam.model";
 import { TeamSubscriptionService } from "./teamSubscription.service";
 
 // 1. TOGGLE TEAM SUBSCRIPTION (BELL ON / OFF)
@@ -75,6 +78,24 @@ const getTeamSubscribersCount = catchAsync(async (req, res) => {
 // 5. BROADCAST NOTIFICATION TO TEAM SUBSCRIBERS (ADMIN / MANAGER)
 const broadcastToSubscribers = catchAsync(async (req, res) => {
   const teamId = req.params.teamId as string;
+  const user = req.user as any;
+  const role = user?.role;
+  const userId = (user?._id || user?.id)?.toString();
+
+  if (role === USER_ROLES.MANAGER) {
+    const isAssigned = await ManagerTeam.findOne({
+      manager: userId,
+      team: teamId,
+    });
+    const isProfileTeam = (user?.selectTeam?._id || user?.selectTeam)?.toString() === teamId;
+    if (!isAssigned && !isProfileTeam) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to broadcast notifications to this team's subscribers",
+      );
+    }
+  }
+
   const { title, message, eventType, metadata } = req.body;
 
   await TeamSubscriptionService.notifyTeamSubscribers(teamId, {

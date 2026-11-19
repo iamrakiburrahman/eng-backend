@@ -17,6 +17,8 @@ import { MatchEvaluation } from "../refereeRating/refereeRating.model";
 import { recordCoinTransaction } from "../../../helpers/coinLedgerHelper";
 import { CoinTransaction } from "../coinTransaction/coinTransaction.model";
 import { COIN_TRANSACTION_CATEGORY } from "../coinTransaction/coinTransaction.interface";
+import { USER_ROLES } from "../../../enums/user";
+import { ManagerTeam } from "../managerTeam/managerTeam.model";
 import mongoose from "mongoose";
 
 // ========================== CREATE ==========================
@@ -61,6 +63,39 @@ const createMatchResultToDB = async (payload: any) => {
       StatusCodes.BAD_REQUEST,
       "Team is not part of this match",
     );
+  }
+
+  // Validate caller authorization for this match/team
+  const currentUser = payload.currentUser;
+  if (currentUser && !payload.isAdmin) {
+    const role = currentUser.role;
+    const currentUserId = (currentUser._id || currentUser.id)?.toString();
+
+    if (role === USER_ROLES.REFEREE) {
+      if (matchData.referee?.toString() !== currentUserId) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You are not authorized to record events for this match as you are not the assigned referee",
+        );
+      }
+    } else if (role === USER_ROLES.MANAGER) {
+      const managerTeams = await ManagerTeam.find({ manager: currentUserId }).distinct("team");
+      const managerTeamIds = managerTeams.map((t: any) => t.toString());
+      if (currentUser.selectTeam) {
+        managerTeamIds.push((currentUser.selectTeam._id || currentUser.selectTeam).toString());
+      }
+      if (!managerTeamIds.includes(String(eventTeam))) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "Managers are only authorized to record match events for their own team",
+        );
+      }
+    } else {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to record match events",
+      );
+    }
   }
 
   // . CHECK MATCH STATUS (Admins have master override to record/adjust match events anytime)
@@ -485,6 +520,40 @@ const updateMatchResultToDB = async (id: string, payload: any) => {
 
   if (!existing) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Match event not found");
+  }
+
+  // Validate caller authorization for updating match events
+  const currentUser = payload.currentUser;
+  if (currentUser && !payload.isAdmin) {
+    const role = currentUser.role;
+    const currentUserId = (currentUser._id || currentUser.id)?.toString();
+    const matchData = await Match.findById(existing.match);
+
+    if (role === USER_ROLES.REFEREE) {
+      if (matchData?.referee?.toString() !== currentUserId) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You are not authorized to update events for this match as you are not the assigned referee",
+        );
+      }
+    } else if (role === USER_ROLES.MANAGER) {
+      const managerTeams = await ManagerTeam.find({ manager: currentUserId }).distinct("team");
+      const managerTeamIds = managerTeams.map((t: any) => t.toString());
+      if (currentUser.selectTeam) {
+        managerTeamIds.push((currentUser.selectTeam._id || currentUser.selectTeam).toString());
+      }
+      if (!managerTeamIds.includes(String(existing.team))) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "Managers are only authorized to update match events for their own team",
+        );
+      }
+    } else {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to update match events",
+      );
+    }
   }
 
   // rollback old

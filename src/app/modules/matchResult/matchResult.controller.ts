@@ -16,6 +16,7 @@ const createMatchResult = catchAsync(async (req: Request, res: Response) => {
     addedBy: user?._id || user?.id,
     userRole,
     isAdmin,
+    currentUser: user,
   };
 
   const result = await MatchResultService.createMatchResultToDB(payload);
@@ -65,6 +66,7 @@ const updateMatchResult = catchAsync(async (req: Request, res: Response) => {
     ...req.body,
     userRole,
     isAdmin,
+    currentUser: user,
   };
 
   const result = await MatchResultService.updateMatchResultToDB(

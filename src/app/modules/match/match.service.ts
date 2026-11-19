@@ -12,6 +12,7 @@ import { socketService } from "../../../helpers/socket/service";
 import { VenueCategory } from "../venueCategory/venueCategory.model";
 import ApiError from "../../../errors/ApiErrors";
 import { StatusCodes } from "http-status-codes";
+import { USER_ROLES } from "../../../enums/user";
 import { ClubEconomy } from "../coinAndBudget/clubEconomySchema.model";
 import { MatchResult } from "../matchResult/matchResult.model";
 import { MatchResultService } from "../matchResult/matchResult.service";
@@ -2504,10 +2505,84 @@ const addMatchReviewToDB = async (
       notes?: string;
     }[];
   },
+  currentUser?: any,
 ) => {
   const match = await Match.findById(matchId);
 
   if (!match) throw new ApiError(StatusCodes.NOT_FOUND, "Match not found");
+
+  const allReviews = [
+    ...(payload.reviews || []),
+    ...(payload.playerReviews || []),
+  ];
+
+  if (!allReviews.length) {
+    throw new Error("No reviews provided");
+  }
+
+  // Authorization check: Verify referee or manager assignment
+  if (currentUser) {
+    const role = currentUser.role;
+    const currentUserId = (currentUser._id || currentUser.id)?.toString();
+    const isAdmin = role === USER_ROLES.ADMIN || role === USER_ROLES.SUPER_ADMIN;
+
+    if (!isAdmin) {
+      if (role === USER_ROLES.REFEREE) {
+        if (match.referee?.toString() !== currentUserId) {
+          throw new ApiError(
+            StatusCodes.FORBIDDEN,
+            "You are not authorized to review this match as you are not the assigned referee",
+          );
+        }
+      } else if (role === USER_ROLES.MANAGER) {
+        const managerTeams = await ManagerTeam.find({ manager: currentUserId }).distinct("team");
+        const managerTeamIds = managerTeams.map((t: any) => t.toString());
+        if (currentUser.selectTeam) {
+          managerTeamIds.push((currentUser.selectTeam._id || currentUser.selectTeam).toString());
+        }
+
+        const homeTeamId = (match.homeTeam?._id || match.homeTeam)?.toString();
+        const awayTeamId = (match.awayTeam?._id || match.awayTeam)?.toString();
+
+        const managedMatchTeams = managerTeamIds.filter(
+          (tId: string) => tId === homeTeamId || tId === awayTeamId,
+        );
+
+        if (managedMatchTeams.length === 0) {
+          throw new ApiError(
+            StatusCodes.FORBIDDEN,
+            "You are not authorized to review this match as your team did not participate in it",
+          );
+        }
+
+        // Managers are strictly authorized to review only their own team and their own team players
+        for (const r of allReviews) {
+          const rev = r as any;
+          if (rev.team && !managedMatchTeams.includes(rev.team.toString())) {
+            throw new ApiError(
+              StatusCodes.FORBIDDEN,
+              "Managers are only authorized to review their own team",
+            );
+          }
+          if (rev.player) {
+            const pUser = await User.findById(rev.player).select("selectTeam");
+            const playerTeam = pUser?.selectTeam?.toString();
+            if (playerTeam && !managedMatchTeams.includes(playerTeam)) {
+              throw new ApiError(
+                StatusCodes.FORBIDDEN,
+                "Managers are only authorized to review players belonging to their own team",
+              );
+            }
+          }
+        }
+      } else {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You are not authorized to submit reviews for this match",
+        );
+      }
+    }
+  }
 
   // Dynamic Feedback Window (Admin Configurable)
   const setting = await getEffectiveMatchSetting();
@@ -2543,15 +2618,6 @@ const addMatchReviewToDB = async (
         );
       }
     }
-  }
-
-  const allReviews = [
-    ...(payload.reviews || []),
-    ...(payload.playerReviews || []),
-  ];
-
-  if (!allReviews.length) {
-    throw new Error("No reviews provided");
   }
 
   const pe = await PlayerEconomy.findOne();
@@ -2874,6 +2940,20 @@ const updateMatchTimerInDB = async (
     throw new ApiError(StatusCodes.NOT_FOUND, "Match not found");
   }
 
+  if (user) {
+    const role = user.role;
+    const currentUserId = (user._id || user.id)?.toString();
+    const isAdmin = role === USER_ROLES.ADMIN || role === USER_ROLES.SUPER_ADMIN;
+    const isAssignedReferee = role === USER_ROLES.REFEREE && match.referee?.toString() === currentUserId;
+
+    if (!isAdmin && !isAssignedReferee) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to control the timer for this match",
+      );
+    }
+  }
+
   const now = new Date();
   let elapsed = match.elapsedSeconds || 0;
 
@@ -3062,11 +3142,26 @@ const modifyMatchScoreInDB = async (
       minute?: number;
     }>;
   },
+  currentUser?: any,
 ) => {
   const match = await Match.findById(id);
 
   if (!match) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Match not found");
+  }
+
+  if (currentUser) {
+    const role = currentUser.role;
+    const currentUserId = (currentUser._id || currentUser.id)?.toString();
+    const isAdmin = role === USER_ROLES.ADMIN || role === USER_ROLES.SUPER_ADMIN;
+    const isAssignedReferee = role === USER_ROLES.REFEREE && match.referee?.toString() === currentUserId;
+
+    if (!isAdmin && !isAssignedReferee) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to modify scores for this match",
+      );
+    }
   }
 
   if (payload.homeScore === undefined || payload.awayScore === undefined) {

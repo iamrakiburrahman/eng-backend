@@ -119,7 +119,7 @@ const toggleMatchStatus = catchAsync(async (req: Request, res: Response) => {
 const addMatchReview = catchAsync(async (req: Request, res: Response) => {
   const matchId = req.params.id as string;
 
-  const result = await MatchService.addMatchReviewToDB(matchId, req.body);
+  const result = await MatchService.addMatchReviewToDB(matchId, req.body, req.user);
 
   sendResponse(res, {
     success: true,
@@ -172,7 +172,7 @@ const updateMatchTimer = catchAsync(async (req: Request, res: Response) => {
 
 const modifyMatchScore = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const result = await MatchService.modifyMatchScoreInDB(id as string, req.body);
+  const result = await MatchService.modifyMatchScoreInDB(id as string, req.body, req.user);
 
   sendResponse(res, {
     success: true,
