@@ -51,3 +51,16 @@ export const otpLimiter = rateLimit({
     message: 'Too many OTP verification attempts. Please try again after 5 minutes.',
   },
 });
+
+// 🔒 Click/View metric tracking limiter: max 60 requests per minute per IP to prevent spam inflation
+export const trackingLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: 429,
+    message: 'Too many tracking requests, please slow down.',
+  },
+});

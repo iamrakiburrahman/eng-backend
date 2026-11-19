@@ -15,6 +15,7 @@ router.get(
 // View player's coin history (Parent, Player, Manager, Admin)
 router.get(
   "/history/:playerId",
+  auth(...ROLE_GROUPS.All),
   CoinTransactionController.getPlayerCoinHistoryForAdmin
 );
 

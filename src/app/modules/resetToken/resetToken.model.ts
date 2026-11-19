@@ -19,6 +19,9 @@ const resetTokenSchema = new Schema<IResetToken, ResetTokenModel>(
   { timestamps: true }
 );
 
+// TTL index to automatically purge expired reset tokens
+resetTokenSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
+
 //token check
 resetTokenSchema.statics.isExistToken = async (
   token: string

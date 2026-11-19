@@ -2,6 +2,7 @@ import express from 'express';
 import { ROLE_GROUPS } from '../../../enums/user';
 import auth from '../../middlewares/auth';
 import fileUploadHandler from '../../middlewares/fileUploaderHandler';
+import { trackingLimiter } from '../../middlewares/rateLimiter';
 import { PromotionalZoneController } from './promotionalZone.controller';
 
 const router = express.Router();
@@ -14,7 +15,7 @@ router.get('/', auth(false), PromotionalZoneController.getAllPromotions);
 router.get('/:id', auth(false), PromotionalZoneController.getSinglePromotion);
 
 // Track ad click (public - when user taps the banner in mobile app)
-router.post('/:id/click', auth(false), PromotionalZoneController.trackPromotionClick);
+router.post('/:id/click', trackingLimiter, auth(false), PromotionalZoneController.trackPromotionClick);
 
 // 2. ADMIN ENDPOINTS
 // Admin view all promotions (including pending / rejected / expired)

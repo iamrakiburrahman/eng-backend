@@ -2,14 +2,15 @@ import express from 'express';
 import { ROLE_GROUPS } from '../../../enums/user';
 import auth from '../../middlewares/auth';
 import fileUploadHandler from '../../middlewares/fileUploaderHandler';
+import { trackingLimiter } from '../../middlewares/rateLimiter';
 import { BookAScoutController } from './bookAScout.controller';
 
 const router = express.Router();
 
 // 1. PUBLIC / MOBILE APP ENDPOINTS
 router.get('/active', auth(false), BookAScoutController.getActiveBookAScout);
-router.post('/:id/view', auth(false), BookAScoutController.recordBookAScoutView);
-router.post('/:id/click', auth(false), BookAScoutController.recordBookAScoutClick);
+router.post('/:id/view', trackingLimiter, auth(false), BookAScoutController.recordBookAScoutView);
+router.post('/:id/click', trackingLimiter, auth(false), BookAScoutController.recordBookAScoutClick);
 
 // 2. ADMIN MANAGEMENT ENDPOINTS
 router

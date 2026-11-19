@@ -8,6 +8,7 @@ const router = express.Router();
 // View specific team coin history
 router.get(
   "/history/:teamId",
+  auth(...ROLE_GROUPS.All),
   TeamCoinTransactionController.getTeamCoinHistory
 );
 
