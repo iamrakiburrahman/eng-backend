@@ -276,7 +276,7 @@ const resetPasswordToDB = async (
 
   const hashPassword = await bcrypt.hash(
     newPassword,
-    Number(config.bcrypt_salt_rounds),
+    Number(config.bcrypt_salt_rounds) || 12,
   );
 
   const updateData = {
@@ -331,7 +331,7 @@ const changePasswordToDB = async (
   //hash password
   const hashPassword = await bcrypt.hash(
     newPassword,
-    Number(config.bcrypt_salt_rounds),
+    Number(config.bcrypt_salt_rounds) || 12,
   );
 
   const updateData = {

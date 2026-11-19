@@ -297,7 +297,7 @@ const updateChieldInfo = catchAsync(async (req: Request, res: Response) => {
   };
 
   const childId = req.params.childId as string;
-  const result = await UserService.updateChieldInfoToDB(childId, updateData);
+  const result = await UserService.updateChieldInfoToDB(childId, updateData, user);
 
   sendResponse(res, {
     success: true,

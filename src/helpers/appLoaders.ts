@@ -1,7 +1,6 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import session from 'express-session';
 import path from 'path';
 import { StatusCodes } from 'http-status-codes';
 import { Morgan } from '../shared/morgan';
@@ -92,15 +91,6 @@ export function configureMiddlewares(app: Express): void {
      app.use(express.static('uploads'));
      app.use('/images', express.static(path.join(process.cwd(), 'uploads', 'documents')));
      app.use('/documents', express.static(path.join(process.cwd(), 'uploads', 'images')));
-
-     app.use(
-          session({
-               secret: process.env.SESSION_SECRET || config.jwt.jwt_secret || 'your_secret_key',
-               resave: false,
-               saveUninitialized: true,
-               cookie: { secure: config.node_env === 'production' },
-          })
-     );
 }
 
 export function configureRoutes(app: Express): void {

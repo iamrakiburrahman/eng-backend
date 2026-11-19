@@ -498,7 +498,7 @@ const getAllRefereesFromDB = async () => {
   const result = await User.find({
     role: { $in: [USER_ROLES.REFEREE] },
   })
-    .select("_id userName firstName lastName email phone profile status")
+    .select("_id userName firstName lastName profile status")
     .lean();
 
   return result.map((r: any) => {
@@ -509,7 +509,6 @@ const getAllRefereesFromDB = async () => {
       fullName ||
       r.userName ||
       r.name ||
-      r.email ||
       `Referee (${r._id.toString().slice(-4)})`;
     return {
       ...r,

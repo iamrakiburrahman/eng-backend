@@ -120,7 +120,7 @@ const updateAdminToDB = async (id: string, payload: any): Promise<IUser> => {
   if (payload.password && payload.password.trim().length >= 6) {
     payload.password = await bcrypt.hash(
       payload.password.trim(),
-      Number(config.bcrypt_salt_rounds)
+      Number(config.bcrypt_salt_rounds) || 12
     );
   } else {
     delete payload.password;

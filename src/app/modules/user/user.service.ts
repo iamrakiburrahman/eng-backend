@@ -277,10 +277,28 @@ const getUserProfileFromDB = async (user: JwtPayload) => {
   };
 };
 
-const updateChieldInfoToDB = async (id: string, payload: any) => {
+const updateChieldInfoToDB = async (id: string, payload: any, currentUser?: any) => {
   const isExistUser = await User.findById(id);
   if (!isExistUser) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Child user not found");
+  }
+
+  // 🔒 IDOR / BOLA Prevention: Verify caller is the child's parent or an Administrator
+  if (currentUser) {
+    const callerId = currentUser._id?.toString() || currentUser.id?.toString();
+    const isParent =
+      isExistUser.parentId?.toString() === callerId ||
+      isExistUser._id?.toString() === callerId;
+    const isAdmin =
+      currentUser.role === USER_ROLES.SUPER_ADMIN ||
+      currentUser.role === USER_ROLES.ADMIN;
+
+    if (!isParent && !isAdmin) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "Access denied: You do not have permission to modify this child's profile."
+      );
+    }
   }
 
   const safePayload: any = pick(payload, USER_SELF_EDITABLE_FIELDS);
