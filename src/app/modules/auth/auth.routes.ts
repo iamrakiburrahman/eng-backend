@@ -24,6 +24,7 @@ router.post(
 
 router.post(
     '/refresh-token',
+    authLimiter,
     AuthController.newAccessToken
 );
 
@@ -67,18 +68,15 @@ router.post(
 );
 
 router.post(
-    '/resend-otp',
-    AuthController.resendVerificationEmail
-);
-
-router.post(
     '/social-login',
+    authLimiter,
     validateRequest(AuthValidation.socialLoginZodSchema),
     AuthController.socialLogin
 );
 
 router.post(
     '/select-role',
+    authLimiter,
     auth(...ROLE_GROUPS.All),
     validateRequest(AuthValidation.selectRoleZodSchema),
     AuthController.selectRole

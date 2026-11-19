@@ -69,44 +69,36 @@ const socket = (io: Server) => {
     socket.on("join", (requestedUserId: any) => {
       const authUser = socket.data.user;
 
-      if (authUser) {
-        const callerId = (authUser._id || authUser.id)?.toString();
-        const isAdmin =
-          authUser.role === USER_ROLES.ADMIN ||
-          authUser.role === USER_ROLES.SUPER_ADMIN;
+      if (!authUser) {
+        logger.warn(
+          colors.red(
+            `Unauthenticated socket (${socket.id}) attempted to join private user room. Blocked.`,
+          ),
+        );
+        return;
+      }
 
-        let targetId = callerId;
-        if (isAdmin && requestedUserId) {
-          targetId =
-            typeof requestedUserId === "object"
-              ? requestedUserId._id || requestedUserId.id || callerId
-              : requestedUserId.toString();
-        }
+      const callerId = (authUser._id || authUser.id)?.toString();
+      const isAdmin =
+        authUser.role === USER_ROLES.ADMIN ||
+        authUser.role === USER_ROLES.SUPER_ADMIN;
 
-        if (targetId) {
-          socket.join(targetId);
-          socket.join(`user-${targetId}`);
-          logger.info(
-            colors.green(
-              `Authenticated User (${targetId}) joined room: user-${targetId}`,
-            ),
-          );
-        }
-      } else if (requestedUserId) {
-        // Fallback for older mobile app builds that have not yet updated to send the token
-        let actualUserId = requestedUserId;
-        if (typeof requestedUserId === "object" && requestedUserId !== null) {
-          actualUserId =
-            requestedUserId._id || requestedUserId.id || requestedUserId.userId;
-        }
-        if (actualUserId) {
-          const strUserId = actualUserId.toString();
-          socket.join(strUserId);
-          socket.join(`user-${strUserId}`);
-          logger.info(
-            colors.yellow(`Legacy unauthenticated join: user-${strUserId}`),
-          );
-        }
+      let targetId = callerId;
+      if (isAdmin && requestedUserId) {
+        targetId =
+          typeof requestedUserId === "object"
+            ? requestedUserId._id || requestedUserId.id || callerId
+            : requestedUserId.toString();
+      }
+
+      if (targetId) {
+        socket.join(targetId);
+        socket.join(`user-${targetId}`);
+        logger.info(
+          colors.green(
+            `Authenticated User (${targetId}) joined room: user-${targetId}`,
+          ),
+        );
       }
     });
 

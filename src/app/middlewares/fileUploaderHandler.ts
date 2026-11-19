@@ -3,6 +3,7 @@ import fs from 'fs';
 import { StatusCodes } from 'http-status-codes';
 import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
+import crypto from 'crypto';
 import ApiError from '../../errors/ApiErrors';
 
 const fileUploadHandler = (maxSizeInMB: number = 10) => {
@@ -54,18 +55,17 @@ const fileUploadHandler = (maxSizeInMB: number = 10) => {
     },
 
     filename: (req, file, cb) => {
-      const fileExt = path.extname(file.originalname);
-
-      const fileName =
-        file.originalname
-          .replace(fileExt, '')
+      const fileExt = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+      const rawBaseName = path.basename(file.originalname, path.extname(file.originalname));
+      const sanitizedBase =
+        rawBaseName
+          .replace(/[^a-zA-Z0-9_-]/g, '')
           .toLowerCase()
-          .split(' ')
-          .join('-') +
-        '-' +
-        Date.now();
+          .slice(0, 50) || 'file';
+      const randomSuffix = crypto.randomBytes(4).toString('hex');
+      const fileName = `${sanitizedBase}-${Date.now()}-${randomSuffix}${fileExt}`;
 
-      cb(null, fileName + fileExt);
+      cb(null, fileName);
     },
   });
 

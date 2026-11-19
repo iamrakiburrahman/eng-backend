@@ -35,7 +35,6 @@ export const USER_SELF_EDITABLE_FIELDS = [
   "ageGroup",
   "strongFoot",
   "position",
-  "jerseyNumber",
   "selectTeam",
   "previousClub",
   "debutDate",
@@ -50,6 +49,7 @@ export const USER_SELF_EDITABLE_FIELDS = [
 
 export const USER_ADMIN_EDITABLE_FIELDS = [
   ...USER_SELF_EDITABLE_FIELDS,
+  "jerseyNumber",
   "engCoine",
   "marketValue",
   "status",

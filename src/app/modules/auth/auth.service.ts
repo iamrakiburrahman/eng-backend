@@ -356,6 +356,13 @@ const newAccessTokenToUser = async (token: string) => {
     throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized access");
   }
 
+  if (isExistUser.status === "REJECTED") {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      "Your account has been suspended or rejected. Please contact support."
+    );
+  }
+
   //create token
   const accessToken = jwtHelper.createToken(
     { id: isExistUser._id, role: isExistUser.role, email: isExistUser.email },
@@ -438,6 +445,13 @@ const socialLoginFromDB = async (payload: ISocialLoginPayload) => {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
       "No email associated with this Google/Apple account"
+    );
+  }
+
+  if (decodedToken.email_verified === false) {
+    throw new ApiError(
+      StatusCodes.UNAUTHORIZED,
+      "Social account email address has not been verified"
     );
   }
 
@@ -568,6 +582,14 @@ const selectRoleToDB = async (userId: string, requestedRole: USER_ROLES) => {
   const user = await User.findById(userId);
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  // Prevent role hijacking: Role can only be selected once for newly created unassigned accounts
+  if (user.role && user.role !== USER_ROLES.UNASSIGNED) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Role has already been selected for this account. Only administrators can modify assigned roles."
+    );
   }
 
   user.role = requestedRole;

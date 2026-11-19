@@ -384,6 +384,18 @@ const updateProfileToDB = async (
 
   const safePayload: any = pick(payload as any, USER_SELF_EDITABLE_FIELDS);
 
+  // Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
+  if (
+    isExistUser.selectTeam &&
+    safePayload.selectTeam &&
+    safePayload.selectTeam.toString() !== isExistUser.selectTeam.toString()
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Player is already affiliated with a club. Club changes must be processed through the Transfer Market."
+    );
+  }
+
   //unlink file here
   if (safePayload.profile) {
     unlinkFile(isExistUser.profile);

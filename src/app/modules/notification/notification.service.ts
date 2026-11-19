@@ -3,6 +3,7 @@ import ApiError from "../../../errors/ApiErrors";
 import QueryBuilder from "../../../util/queryBuilder";
 import { Notification } from "./notification.model";
 import { getNotificationCategory } from "../../../helpers/notificationsHelper";
+import { USER_ROLES } from "../../../enums/user";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAYER: GET OWN NOTIFICATIONS (paginated)
@@ -80,8 +81,23 @@ const markAllAsRead = async (userId: string) => {
   };
 };
 
-const deleteNotification = async (id: string) => {
-  const result = await Notification.findByIdAndDelete(id);
+const deleteNotification = async (id: string, user?: any) => {
+  const isAdmin =
+    user &&
+    (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.SUPER_ADMIN);
+
+  let result;
+  if (isAdmin) {
+    result = await Notification.findByIdAndDelete(id);
+  } else {
+    const userId = user?._id || user?.id;
+    result = await Notification.findOneAndDelete({ _id: id, receiver: userId });
+  }
+
+  if (!result) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Notification not found or access denied");
+  }
+
   return result;
 };
 

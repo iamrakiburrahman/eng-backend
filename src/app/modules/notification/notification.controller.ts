@@ -80,10 +80,10 @@ const markAllAsRead = catchAsync(async (req: Request, res: Response) => {
   });
 });
 // ─────────────────────────────────────────────────────────────────────────────
-// PLAYER: DELETE ALL NOTIFICATIONS 
+// PLAYER / USER: DELETE ALL NOTIFICATIONS 
 // ─────────────────────────────────────────────────────────────────────────────
 const deleteAllNotifications = catchAsync(async (req: Request, res: Response) => {
-  const { id: userId } = req.user as { id: string };
+  const userId = (req.user as any)?._id || (req.user as any)?.id;
 
   const result = await NotificationService.deleteAllNotifications(userId);
 
@@ -91,13 +91,13 @@ const deleteAllNotifications = catchAsync(async (req: Request, res: Response) =>
     success: true,
     statusCode: StatusCodes.OK,
     message: "All notifications deleted successfully",
-    data: {},
+    data: result,
   });
 });
 
 const deleteNotification = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const result = await NotificationService.deleteNotification(id as string);
+  const result = await NotificationService.deleteNotification(id as string, req.user);
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,

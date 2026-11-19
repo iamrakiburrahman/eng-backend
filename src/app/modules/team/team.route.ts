@@ -17,7 +17,11 @@ router
   .get(TeamController.getAllTeams);
 
 // TEAM ANALYTICS
-router.get('/analytics', TeamController.getTeamAnalytics);
+router.get(
+  '/analytics',
+  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+  TeamController.getTeamAnalytics
+);
 
 // SINGLE + UPDATE + DELETE
 router

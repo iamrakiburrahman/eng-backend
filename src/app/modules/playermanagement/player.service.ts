@@ -279,6 +279,18 @@ const updatePlayerByParentToDB = async (
 
   const safePayload: any = pick(payload, USER_SELF_EDITABLE_FIELDS);
 
+  // Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
+  if (
+    player.selectTeam &&
+    safePayload.selectTeam &&
+    safePayload.selectTeam.toString() !== player.selectTeam.toString()
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Player is already affiliated with a club. Club changes must be processed through the Transfer Market."
+    );
+  }
+
   // If player was REJECTED, resubmitting updates resets status to PENDING for admin review
   if (player.status === "REJECTED") {
     safePayload.status = "PENDING";
