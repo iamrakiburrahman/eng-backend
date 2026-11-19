@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
+import { USER_ROLES } from '../../../enums/user';
 import { QuizService } from './quiz.service';
 import { resolveEffectivePlayerForAction } from '../../../helpers/playerProfileResolver';
 
@@ -46,8 +47,9 @@ const getAllQuizzes = catchAsync(async (req: Request, res: Response) => {
 
 const getSingleQuiz = catchAsync(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const isPlayMode = req.query.mode === 'play';
-  const result = await QuizService.getSingleQuizFromDB(id, !isPlayMode);
+  const user = req.user as any;
+  const isAdmin = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.SUPER_ADMIN;
+  const result = await QuizService.getSingleQuizFromDB(id, isAdmin);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,

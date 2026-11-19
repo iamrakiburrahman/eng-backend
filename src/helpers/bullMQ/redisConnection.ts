@@ -33,16 +33,16 @@ redisConnection.on('error', (err: any) => {
                lastAuthErrorLoggedAt = now;
                errorLogger.error(
                     colors.red(
-                         `❌ Redis (BullMQ) authentication error: ${msg} (check REDIS_URL or REDIS_PASSWORD in .env)`,
+                         `Redis (BullMQ) authentication error: ${msg} (check REDIS_URL or REDIS_PASSWORD in .env)`,
                     ),
                );
           }
           return;
      }
-     errorLogger.error(colors.red(`❌ Redis (BullMQ) connection error: ${msg || err}`));
+     errorLogger.error(colors.red(`Redis (BullMQ) connection error: ${msg || err}`));
 });
 
 redisConnection.on('ready', () => {
      lastAuthErrorLoggedAt = 0;
-     logger.info(colors.green('✅ Redis (BullMQ) connected & ready'));
+     logger.info(colors.green('Redis (BullMQ) connected & ready'));
 });

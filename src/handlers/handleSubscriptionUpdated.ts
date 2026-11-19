@@ -36,13 +36,13 @@ export const handleSubscriptionUpdated = async (data: any) => {
   }
 
   if (!existingUser) {
-    console.warn(`⚠️ handleSubscriptionUpdated: User not found for customer email ${customer?.email}`);
+    console.warn(`handleSubscriptionUpdated: User not found for customer email ${customer?.email}`);
     return;
   }
 
   const pkg = await Package.findOne({ stripePriceId: priceId });
   if (!pkg) {
-    console.error(`❌ Package not found for priceId: ${priceId}`);
+    console.error(`Package not found for priceId: ${priceId}`);
     return;
   }
 
@@ -146,7 +146,7 @@ export const handleSubscriptionUpdated = async (data: any) => {
         await NotificationQueueHelper.sendNotification(
           existingUser._id.toString(),
           `Your subscription has been updated to package "${pkg.title}".`,
-          "Subscription Updated 🚀",
+          "Subscription Updated ",
           NOTIFICATION_TYPE.SUBSCRIPTION_ACTIVATED
         );
       } catch (err) {
@@ -218,7 +218,7 @@ export const handleSubscriptionUpdated = async (data: any) => {
     await NotificationQueueHelper.sendNotification(
       existingUser._id.toString(),
       `Your subscription has been updated to package "${pkg.title}".`,
-      "Subscription Updated 🚀",
+      "Subscription Updated ",
       NOTIFICATION_TYPE.SUBSCRIPTION_ACTIVATED
     );
   } catch (err) {

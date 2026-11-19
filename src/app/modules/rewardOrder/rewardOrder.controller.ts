@@ -36,7 +36,9 @@ const getAllRewardOrders = catchAsync(async (req: Request, res: Response) => {
 
 // MY ORDERS
 const getMyRewardOrders = catchAsync(async (req: Request, res: Response) => {
-  const result = await RewardOrderService.getMyRewardOrdersFromDB(req.query);
+  const user = req.user as any;
+  const currentUserId = (user?._id || user?.id)?.toString();
+  const result = await RewardOrderService.getMyRewardOrdersFromDB(req.query, currentUserId);
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
@@ -50,6 +52,7 @@ const getMyRewardOrders = catchAsync(async (req: Request, res: Response) => {
 const getSingleRewardOrder = catchAsync(async (req: Request, res: Response) => {
   const result = await RewardOrderService.getSingleRewardOrderFromDB(
     req.params.id as string,
+    req.user
   );
 
   sendResponse(res, {

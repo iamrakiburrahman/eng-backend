@@ -20,7 +20,7 @@ const newsSchema = new Schema<INews, NewsModel>(
       required: true,
     },
 
-    // 🔥 ADD THIS FIELD
+    // ADD THIS FIELD
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',

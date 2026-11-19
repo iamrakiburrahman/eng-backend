@@ -22,8 +22,18 @@ const createRewardOrderToDB = async (payload: any, userId: string) => {
   try {
     session.startTransaction();
 
-    const targetPlayerId =
-      payload.player || payload.playerId || payload.user || userId;
+    let targetPlayerId = userId;
+    const requestedTarget = payload.player || payload.playerId || payload.user;
+    if (requestedTarget && requestedTarget.toString() !== userId.toString()) {
+      const parentCheck = await User.findById(requestedTarget).session(session);
+      if (!parentCheck || !parentCheck.parentId || parentCheck.parentId.toString() !== userId.toString()) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You are not authorized to use another player's balance to create reward orders",
+        );
+      }
+      targetPlayerId = requestedTarget;
+    }
 
     const user = await User.findById(targetPlayerId).session(session);
 
@@ -224,14 +234,17 @@ const getAllRewardOrdersFromDB = async (query: Record<string, any>) => {
 };
 
 // MY ORDERS
-const getMyRewardOrdersFromDB = async (query: Record<string, any>) => {
+const getMyRewardOrdersFromDB = async (query: Record<string, any>, userId?: string) => {
   const page = Math.max(Number(query.page) || 1, 1);
   const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 100);
   const skip = (page - 1) * limit;
 
-  const filter = {
-    user: query.player,
-  };
+  const filter: any = {};
+  if (userId) {
+    filter.user = userId;
+  } else if (query.player) {
+    filter.user = query.player;
+  }
 
   const [result, total] = await Promise.all([
     RewardOrder.find(filter)
@@ -258,7 +271,7 @@ const getMyRewardOrdersFromDB = async (query: Record<string, any>) => {
 };
 
 // SINGLE
-const getSingleRewardOrderFromDB = async (id: string) => {
+const getSingleRewardOrderFromDB = async (id: string, currentUser?: any) => {
   const result = await RewardOrder.findById(id)
     .populate("user")
     .populate("rewardProduct")
@@ -266,6 +279,16 @@ const getSingleRewardOrderFromDB = async (id: string) => {
 
   if (!result) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Reward order not found");
+  }
+
+  if (currentUser) {
+    const role = currentUser.role;
+    const currentUserId = (currentUser._id || currentUser.id)?.toString();
+    const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
+    const orderUserId = (result.user as any)?._id?.toString() || result.user?.toString();
+    if (!isAdmin && orderUserId !== currentUserId) {
+      throw new ApiError(StatusCodes.FORBIDDEN, "You are not authorized to view this reward order");
+    }
   }
 
   return result;
@@ -377,7 +400,7 @@ const rejectRewardOrderToDB = async (
     session.endSession();
 
     const reasonText = rejectReason ? ` Reason: ${rejectReason}` : "";
-    // 🔔 Notify player: order rejected + points refunded via background queue
+    // Notify player: order rejected + points refunded via background queue
     await NotificationQueueHelper.sendNotification(
       order.user.toString(),
       `Your reward order has been rejected. ${order.pointUsed} points have been refunded to your account.${reasonText}`,

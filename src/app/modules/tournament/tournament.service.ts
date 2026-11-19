@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Types } from "mongoose";
 import { StatusCodes } from "http-status-codes";
 import ApiError from "../../../errors/ApiErrors";
@@ -235,8 +236,7 @@ const getTournamentQrCodeFromDB = async (tournamentId: string) => {
 
   let isModified = false;
   if (!tournament.rewardToken) {
-    tournament.rewardToken =
-      Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    tournament.rewardToken = crypto.randomBytes(16).toString("hex");
     isModified = true;
   }
 
@@ -244,8 +244,7 @@ const getTournamentQrCodeFromDB = async (tournamentId: string) => {
     tournament.positionRewards.forEach((reward: any) => {
       if (!reward.rewardToken) {
         reward.rewardToken =
-          Math.random().toString(36).substring(2, 10) +
-          Date.now().toString(36) +
+          crypto.randomBytes(12).toString("hex") +
           "_" +
           reward.position;
         isModified = true;
@@ -332,6 +331,17 @@ const redeemTournamentRewardInDB = async (
     );
   }
 
+  // Prevent claiming for unauthorized player
+  if (finalPlayerId.toString() !== userId.toString()) {
+    const parentCheck = await User.findById(finalPlayerId);
+    if (!parentCheck || !parentCheck.parentId || parentCheck.parentId.toString() !== userId.toString()) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "You are not authorized to claim rewards for this player",
+      );
+    }
+  }
+
   if (!tournamentId || !rewardToken) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
@@ -362,16 +372,16 @@ const redeemTournamentRewardInDB = async (
     );
   }
 
+  // 1. Strictly validate token against position reward token
   let matchedPosition = (tournament.positionRewards || []).find(
-    (pr: any) =>
-      pr.rewardToken === rewardToken ||
-      (targetPosition !== undefined && pr.position === targetPosition),
+    (pr: any) => pr.rewardToken && pr.rewardToken === rewardToken
   );
 
-  if (!matchedPosition && tournament.rewardToken === rewardToken) {
+  // 2. If token matches tournament main reward token, locate matching position
+  if (!matchedPosition && tournament.rewardToken && tournament.rewardToken === rewardToken) {
     if (targetPosition !== undefined) {
       matchedPosition = (tournament.positionRewards || []).find(
-        (pr: any) => pr.position === targetPosition,
+        (pr: any) => pr.position === targetPosition
       );
     }
     if (!matchedPosition && tournament.positionRewards?.length > 0) {
@@ -388,17 +398,6 @@ const redeemTournamentRewardInDB = async (
 
   const playerObjectId = new Types.ObjectId(finalPlayerId);
 
-  const hasAlreadyRedeemed = tournament.redeemedPlayers?.some(
-    (rp: any) => rp.player.toString() === finalPlayerId.toString(),
-  );
-
-  if (hasAlreadyRedeemed) {
-    throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      "This player has already redeemed a prize for this tournament!",
-    );
-  }
-
   const prizeCoins = Number(matchedPosition.points) || 0;
   if (prizeCoins <= 0) {
     throw new ApiError(
@@ -412,7 +411,7 @@ const redeemTournamentRewardInDB = async (
     throw new ApiError(StatusCodes.NOT_FOUND, "Player profile not found");
   }
 
-  // 🟢 1. Player Status must be APPROVED
+  // 1. Player Status must be APPROVED
   if (user.status !== "APPROVED") {
     throw new ApiError(
       StatusCodes.FORBIDDEN,
@@ -420,7 +419,7 @@ const redeemTournamentRewardInDB = async (
     );
   }
 
-  // 💳 2. Player must have an active subscription package
+  // 2. Player must have an active subscription package
   const activeSubscription = await Subscription.findOne({
     user: user._id,
     status: "active",
@@ -430,6 +429,33 @@ const redeemTournamentRewardInDB = async (
     throw new ApiError(
       StatusCodes.FORBIDDEN,
       "Player must have an active subscription package to redeem tournament prize rewards!",
+    );
+  }
+
+  const redemptionRecord = {
+    player: playerObjectId,
+    position: matchedPosition.position,
+    positionName: matchedPosition.positionName,
+    redeemedAt: new Date(),
+    coins: prizeCoins,
+  };
+
+  // Atomically lock and register redemption to prevent double-spending race conditions
+  const updatedTournament = await Tournament.findOneAndUpdate(
+    {
+      _id: tournament._id,
+      "redeemedPlayers.player": { $ne: playerObjectId },
+    },
+    {
+      $push: { redeemedPlayers: redemptionRecord },
+    },
+    { new: true }
+  );
+
+  if (!updatedTournament) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "This player has already redeemed a prize for this tournament!",
     );
   }
 
@@ -446,20 +472,6 @@ const redeemTournamentRewardInDB = async (
     user.engCoine = updatedUser.engCoine;
     user.marketValue = updatedUser.marketValue;
   }
-
-  if (!tournament.redeemedPlayers) {
-    tournament.redeemedPlayers = [];
-  }
-
-  tournament.redeemedPlayers.push({
-    player: playerObjectId,
-    position: matchedPosition.position,
-    positionName: matchedPosition.positionName,
-    redeemedAt: new Date(),
-    coins: prizeCoins,
-  });
-
-  await tournament.save();
 
   const getValidEmail = (val?: string | null) =>
     val && typeof val === "string" && val.includes("@") ? val : "";

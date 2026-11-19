@@ -26,12 +26,12 @@ const createNews = catchAsync(async (req: Request, res: Response) => {
     ...data,
   };
 
-  // ❌ remove user publish date input
+  // remove user publish date input
   delete payload.publishDateTime;
 
 
 
-  // ✅ image path clean
+  // image path clean
   if (image) {
     payload.image = image.path
       .replace(/\\/g, '/')

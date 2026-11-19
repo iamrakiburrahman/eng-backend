@@ -61,22 +61,22 @@ async function runMigration() {
     process.env.DB_URL;
 
   if (!dbUrl) {
-    console.error('❌ Error: No MongoDB connection URI found in arguments or .env file.');
+    console.error('Error: No MongoDB connection URI found in arguments or .env file.');
     console.error('Usage: node scripts/migrateLeagueAgeGroups.js [MONGO_URI] [--dry-run] [--force]');
     process.exit(1);
   }
 
   const maskedUri = dbUrl.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@');
-  console.log(`\n🔌 Connecting to MongoDB: ${maskedUri}`);
+  console.log(`\nConnecting to MongoDB: ${maskedUri}`);
   if (isDryRun) {
-    console.log('⚠️ Running in DRY RUN mode (no changes will be written to database)');
+    console.log('Running in DRY RUN mode (no changes will be written to database)');
   }
   if (isForce) {
-    console.log('⚡ Running in FORCE mode (will re-extract and overwrite existing ageGroup)');
+    console.log('Running in FORCE mode (will re-extract and overwrite existing ageGroup)');
   }
 
   await mongoose.connect(dbUrl);
-  console.log('✅ Connected successfully to MongoDB.\n');
+  console.log('Connected successfully to MongoDB.\n');
 
   const db = mongoose.connection.db;
   const leaguesCollection = db.collection('leagues');
@@ -99,10 +99,10 @@ async function runMigration() {
   });
 
   const uniqueKnownAges = Array.from(new Set(knownAges));
-  console.log(`📋 Loaded ${uniqueKnownAges.length} reference age groups from AgeGroupCategory:`, uniqueKnownAges);
+  console.log(`Loaded ${uniqueKnownAges.length} reference age groups from AgeGroupCategory:`, uniqueKnownAges);
 
   const leagues = await leaguesCollection.find({}).toArray();
-  console.log(`\n🏆 Total leagues found in database: ${leagues.length}\n`);
+  console.log(`\nTotal leagues found in database: ${leagues.length}\n`);
 
   let updatedCount = 0;
   let alreadyHasCount = 0;
@@ -114,7 +114,7 @@ async function runMigration() {
 
     // If league already has ageGroup and not force mode, skip
     if (!isForce && league.ageGroup && typeof league.ageGroup === 'string' && league.ageGroup.trim() !== '') {
-      console.log(`ℹ️ [${indexStr}/${leagues.length}] "${league.leagueName}" -> Already has ageGroup: [${league.ageGroup}]`);
+      console.log(`ℹ[${indexStr}/${leagues.length}] "${league.leagueName}" -> Already has ageGroup: [${league.ageGroup}]`);
       alreadyHasCount++;
       continue;
     }
@@ -128,16 +128,16 @@ async function runMigration() {
           { $set: { ageGroup: detected } }
         );
       }
-      console.log(`✅ [${indexStr}/${leagues.length}] "${league.leagueName}" -> ${isDryRun ? '[DRY-RUN] Would set' : 'Updated to'} ageGroup: "${detected}"`);
+      console.log(`[${indexStr}/${leagues.length}] "${league.leagueName}" -> ${isDryRun ? '[DRY-RUN] Would set' : 'Updated to'} ageGroup: "${detected}"`);
       updatedCount++;
     } else {
-      console.log(`⚠️ [${indexStr}/${leagues.length}] "${league.leagueName}" -> No age pattern found in name.`);
+      console.log(`[${indexStr}/${leagues.length}] "${league.leagueName}" -> No age pattern found in name.`);
       notFoundCount++;
     }
   }
 
   console.log('\n========================================');
-  console.log(`🎉 League Migration Summary ${isDryRun ? '(DRY RUN)' : '(LIVE)'}`);
+  console.log(`League Migration Summary ${isDryRun ? '(DRY RUN)' : '(LIVE)'}`);
   console.log('========================================');
   console.log(`Total Leagues Checked : ${leagues.length}`);
   console.log(`Successfully Updated  : ${updatedCount}`);
@@ -146,11 +146,11 @@ async function runMigration() {
   console.log('========================================\n');
 
   await mongoose.disconnect();
-  console.log('🔌 Disconnected from MongoDB.');
+  console.log('Disconnected from MongoDB.');
   process.exit(0);
 }
 
 runMigration().catch(err => {
-  console.error('\n❌ Migration Failed with Error:', err);
+  console.error('\nMigration Failed with Error:', err);
   process.exit(1);
 });

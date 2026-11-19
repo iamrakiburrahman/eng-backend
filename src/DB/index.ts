@@ -21,18 +21,18 @@ const seedSuperAdmin = async () => {
 
     if (!isExistSuperAdmin) {
         await User.create(superUser);
-        logger.info(colors.green('✔ Super admin created successfully!'));
+        logger.info(colors.green('Super admin created successfully!'));
     }
 
     // Seed a demo notification if none exists
     const isNotificationExist = await PushNotification.findOne();
     if (!isNotificationExist) {
         await PushNotification.create({
-            title: "Welcome to ENG TV! 📺",
+            title: "Welcome to ENG TV! ",
             message: "This is a demo broadcast notification sent to all users. Live streams and highlight updates will appear here.",
             user: null,
         });
-        logger.info(colors.green('✔ Demo push notification seeded successfully!'));
+        logger.info(colors.green('Demo push notification seeded successfully!'));
     }
 
     // Seed a demo in-app notification for the Admin to receive via NotificationHelper
@@ -46,11 +46,11 @@ const seedSuperAdmin = async () => {
         const isInAppExist = await InAppNotification.findOne({ receiver: adminUser._id });
         if (!isInAppExist) {
             await NotificationHelper.sendToUser(adminUser._id.toString(), {
-                title: "System Status Alert 🚨",
+                title: "System Status Alert ",
                 body: "This is a demo system alert sent to your Admin account. Everything is running smoothly.",
                 type: NOTIFICATION_TYPE.GENERAL,
             });
-            logger.info(colors.green('✔ Demo admin in-app notification seeded successfully!'));
+            logger.info(colors.green('Demo admin in-app notification seeded successfully!'));
         }
     }
 };

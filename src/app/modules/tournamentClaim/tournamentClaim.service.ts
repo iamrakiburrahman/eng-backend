@@ -207,7 +207,7 @@ const reviewClaimInDB = async (
   }
 
   if (status === 'approved') {
-    // 🛑 1-Person per Position Rule: Ensure no other user is approved for this position
+    // 1-Person per Position Rule: Ensure no other user is approved for this position
     const duplicateApproval = await TournamentClaim.findOne({
       tournament: claim.tournament,
       claimedPosition: claim.claimedPosition,
@@ -229,7 +229,7 @@ const reviewClaimInDB = async (
 
     const pointsToAward = rewardConfig ? rewardConfig.points : 0;
 
-    // 🔒 Concurrency-safe atomic claim approval to prevent double-crediting
+    // Concurrency-safe atomic claim approval to prevent double-crediting
     const updatedClaim = await TournamentClaim.findOneAndUpdate(
       { _id: claimId, status: 'pending' },
       {
@@ -247,7 +247,7 @@ const reviewClaimInDB = async (
       );
     }
 
-    // 💰 Credit reward points to user account only after atomic claim lock
+    // Credit reward points to user account only after atomic claim lock
     if (pointsToAward > 0) {
       await User.findByIdAndUpdate(claim.user, {
         $inc: { rewardPoint: pointsToAward },

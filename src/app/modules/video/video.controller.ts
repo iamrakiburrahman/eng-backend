@@ -21,21 +21,21 @@ const createVideo = catchAsync(async (req: Request, res: Response) => {
 
   const payload: any = { ...data };
 
-  // 🖼️ Thumbnail Upload (still local)
+  // Thumbnail Upload (still local)
   if (thumbnail) {
     payload.thumbnail = thumbnail.path
       .replace(/\\/g, '/')
       .split('uploads')[1];
   }
 
-  // 🎥 Direct Video Upload (if uploaded via form-data 'video' field)
+  // Direct Video Upload (if uploaded via form-data 'video' field)
   if (videoFile) {
     const videoS3Url = await uploadToS3(videoFile, 'videos');
     payload.videoUrl = videoS3Url;
     payload._localVideoPath = videoFile.path;
   }
 
-  // 📅 Publish Logic
+  // Publish Logic
   if (payload.status === 'publish') {
     payload.publishDateTime = new Date();
   } else {
@@ -98,21 +98,21 @@ const updateVideo = catchAsync(async (req: Request, res: Response) => {
 
   const payload: any = { ...data };
 
-  // 🖼️ Thumbnail Upload (still local)
+  // Thumbnail Upload (still local)
   if (thumbnail) {
     payload.thumbnail = thumbnail.path
       .replace(/\\/g, "/")
       .split("uploads")[1];
   }
 
-  // 🎥 Direct Video Upload (if uploaded via form-data 'video' field)
+  // Direct Video Upload (if uploaded via form-data 'video' field)
   if (videoFile) {
     const videoS3Url = await uploadToS3(videoFile, 'videos');
     payload.videoUrl = videoS3Url;
     payload._localVideoPath = videoFile.path;
   }
 
-  // 📅 Publish Logic
+  // Publish Logic
   if (payload.status === "publish") {
     payload.publishDateTime = new Date();
   } else if (payload.status === "draft") {

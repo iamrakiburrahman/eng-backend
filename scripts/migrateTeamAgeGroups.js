@@ -23,7 +23,7 @@ async function runMigration() {
   const dbUrl = process.env.DATABASE_URL || 'mongodb+srv://engsports:engsports123@cluster0.p7qsl.mongodb.net/engsports?retryWrites=true&w=majority';
   console.log('Connecting to MongoDB...');
   await mongoose.connect(dbUrl);
-  console.log('✅ Connected to MongoDB');
+  console.log('Connected to MongoDB');
 
   const db = mongoose.connection.db;
   const teamsCollection = db.collection('teams');
@@ -40,7 +40,7 @@ async function runMigration() {
 
     // 1. Check if already has valid ageGroup
     if (team.ageGroup && typeof team.ageGroup === 'string' && team.ageGroup.trim() !== '') {
-      console.log(`ℹ️ Team "${team.teamName}" already has ageGroup: [${team.ageGroup}]`);
+      console.log(`ℹTeam "${team.teamName}" already has ageGroup: [${team.ageGroup}]`);
       alreadyHasCount++;
       continue;
     }
@@ -58,16 +58,16 @@ async function runMigration() {
         { _id: team._id },
         { $set: { ageGroup: detectedAgeGroup } }
       );
-      console.log(`✅ Updated Team "${team.teamName}" (ID: ${team._id}) -> ageGroup: "${detectedAgeGroup}"`);
+      console.log(`Updated Team "${team.teamName}" (ID: ${team._id}) -> ageGroup: "${detectedAgeGroup}"`);
       updatedCount++;
     } else {
-      console.log(`⚠️ No age pattern found in name/shortName for Team "${team.teamName}" (ID: ${team._id}).`);
+      console.log(`No age pattern found in name/shortName for Team "${team.teamName}" (ID: ${team._id}).`);
       notFoundCount++;
     }
   }
 
   console.log('\n========================================');
-  console.log('🎉 Migration Completed Successfully!');
+  console.log('Migration Completed Successfully!');
   console.log(`Total Teams Checked: ${teams.length}`);
   console.log(`Newly Updated:       ${updatedCount}`);
   console.log(`Already Had Field:   ${alreadyHasCount}`);
@@ -78,6 +78,6 @@ async function runMigration() {
 }
 
 runMigration().catch(err => {
-  console.error('❌ Migration Error:', err);
+  console.error('Migration Error:', err);
   process.exit(1);
 });

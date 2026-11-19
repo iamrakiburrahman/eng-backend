@@ -6,7 +6,7 @@ async function main() {
      try {
           await connectToRedis();
           const stats = await getAllQueuesStats();
-          console.log(colors.bgBlue.white('\n📊 BULLMQ QUEUE STATS:\n'));
+          console.log(colors.bgBlue.white('\nBULLMQ QUEUE STATS:\n'));
           console.table(stats);
           await disconnectRedis();
           process.exit(0);

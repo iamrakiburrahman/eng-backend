@@ -5,7 +5,7 @@ export interface IMatchSetting {
   isFeedbackWindowRestricted: boolean;
   timezone: string;
 
-  // 🔔 Dynamic Upcoming Match Reminder Settings
+  // Dynamic Upcoming Match Reminder Settings
   isMatchReminderEnabled: boolean;
   matchReminderHours: number;
   matchReminderAudience: 'STAKEHOLDERS' | 'ALL';

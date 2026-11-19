@@ -45,7 +45,7 @@ export const handleSubscriptionCreated = async (data: any) => {
   }
 
   if (!user) {
-    console.warn(`⚠️ handleSubscriptionCreated: User not found for customer email "${customer?.email}". Will rely on checkout.session.completed event for activation.`);
+    console.warn(`handleSubscriptionCreated: User not found for customer email "${customer?.email}". Will rely on checkout.session.completed event for activation.`);
     return;
   }
 
@@ -70,7 +70,7 @@ export const handleSubscriptionCreated = async (data: any) => {
   });
 
   if (!pkg) {
-    console.error("❌ Package not found for priceId:", priceId);
+    console.error("Package not found for priceId:", priceId);
     throw new ApiError(StatusCodes.NOT_FOUND, "Package not found");
   }
 
@@ -160,12 +160,12 @@ export const handleSubscriptionCreated = async (data: any) => {
     });
   }
 
-  // 🔔 Queue push + in-app notification
+  // Queue push + in-app notification
   try {
     await NotificationQueueHelper.sendNotification(
       user._id.toString(),
       `Your subscription for package "${pkg.title}" is now active. Enjoy all premium features!`,
-      "Subscription Activated! 🚀",
+      "Subscription Activated! ",
       NOTIFICATION_TYPE.SUBSCRIPTION_ACTIVATED
     );
   } catch (err) {

@@ -11,7 +11,7 @@ const socket = (io: Server) => {
   // Initialize SocketService (Redis Adapter is initialized in serverLifecycle.ts)
   socketService.init(io);
 
-  // 🔒 Socket Authentication Middleware
+  // Socket Authentication Middleware
   io.use((socket: Socket, next) => {
     try {
       const token =
@@ -57,7 +57,7 @@ const socket = (io: Server) => {
         socket.join(`user-${authUserId}`);
         logger.info(
           colors.green(
-            `🚀 Authenticated user auto-joined room: user-${authUserId}`,
+            `Authenticated user auto-joined room: user-${authUserId}`,
           ),
         );
       }
@@ -88,7 +88,7 @@ const socket = (io: Server) => {
           socket.join(`user-${targetId}`);
           logger.info(
             colors.green(
-              `✅ Authenticated User (${targetId}) joined room: user-${targetId}`,
+              `Authenticated User (${targetId}) joined room: user-${targetId}`,
             ),
           );
         }
@@ -104,7 +104,7 @@ const socket = (io: Server) => {
           socket.join(strUserId);
           socket.join(`user-${strUserId}`);
           logger.info(
-            colors.yellow(`⚠️ Legacy unauthenticated join: user-${strUserId}`),
+            colors.yellow(`Legacy unauthenticated join: user-${strUserId}`),
           );
         }
       }
@@ -125,7 +125,7 @@ const socket = (io: Server) => {
           socket.leave(`user-${strUserId}`);
           logger.info(
             colors.yellow(
-              `❌ User ${strUserId} left room: ${strUserId} & user-${strUserId}`,
+              `User ${strUserId} left room: ${strUserId} & user-${strUserId}`,
             ),
           );
         }
@@ -146,7 +146,7 @@ const socket = (io: Server) => {
           socket.join(`match_${strMatchId}`);
           logger.info(
             colors.green(
-              `✅ Socket ${socket.id} joined room: match_${strMatchId}`,
+              `Socket ${socket.id} joined room: match_${strMatchId}`,
             ),
           );
         }
@@ -164,7 +164,7 @@ const socket = (io: Server) => {
           socket.leave(`match_${strMatchId}`);
           logger.info(
             colors.yellow(
-              `❌ Socket ${socket.id} left room: match_${strMatchId}`,
+              `Socket ${socket.id} left room: match_${strMatchId}`,
             ),
           );
         }

@@ -61,11 +61,11 @@ export class NotificationHelper {
                await Promise.allSettled(tasks);
                logger.info(
                     colors.green(
-                         `✅ Notification flow completed for ${validUserIds.length} users.`,
+                         `Notification flow completed for ${validUserIds.length} users.`,
                     ),
                );
           } catch (error) {
-               logger.error(colors.red('❌ NotificationHelper Error:'), error);
+               logger.error(colors.red('NotificationHelper Error:'), error);
           }
      }
 
@@ -145,7 +145,7 @@ export class NotificationHelper {
                               });
                          }
                     } catch (chunkErr: any) {
-                         logger.error(colors.red('❌ FCM Chunk Send Error:'), chunkErr?.message || chunkErr);
+                         logger.error(colors.red('FCM Chunk Send Error:'), chunkErr?.message || chunkErr);
                     }
                }
 
@@ -157,18 +157,18 @@ export class NotificationHelper {
                     );
                     logger.info(
                          colors.yellow(
-                              `🗑️ Removed ${allFailedTokens.length} invalid FCM tokens from users`,
+                              `Removed ${allFailedTokens.length} invalid FCM tokens from users`,
                          ),
                     );
                }
 
                logger.info(
                     colors.green(
-                         `📲 FCM Multicast Completed: ${totalSuccess} success, ${totalFailure} failed out of ${tokens.length} total tokens`,
+                         `FCM Multicast Completed: ${totalSuccess} success, ${totalFailure} failed out of ${tokens.length} total tokens`,
                     ),
                );
           } catch (error) {
-               logger.error(colors.red('❌ FCM Send Error:'), error);
+               logger.error(colors.red('FCM Send Error:'), error);
           }
      }
 
@@ -206,11 +206,11 @@ export class NotificationHelper {
 
                logger.info(
                     colors.cyan(
-                         `💾 & 📡 Processed ${userIds.length} notifications via sendNotification.`,
+                         `& Processed ${userIds.length} notifications via sendNotification.`,
                     ),
                );
           } catch (error) {
-               logger.error(colors.red('❌ NotificationHelper saveToDatabase Error:'), error);
+               logger.error(colors.red('NotificationHelper saveToDatabase Error:'), error);
           }
      }
 }

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Schema, model } from 'mongoose';
 import { ITournament, TournamentModel } from './tournament.interface';
 
@@ -85,12 +86,12 @@ const tournamentSchema = new Schema<ITournament, TournamentModel>(
 
 tournamentSchema.pre('save', function () {
   if (!this.rewardToken) {
-    this.rewardToken = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    this.rewardToken = crypto.randomBytes(16).toString('hex');
   }
   if (this.positionRewards && this.positionRewards.length > 0) {
     this.positionRewards.forEach((r: any) => {
       if (!r.rewardToken) {
-        r.rewardToken = Math.random().toString(36).substring(2, 10) + Date.now().toString(36) + '_' + r.position;
+        r.rewardToken = crypto.randomBytes(12).toString('hex') + '_' + r.position;
       }
     });
   }

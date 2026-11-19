@@ -19,7 +19,7 @@ const createVideoToDB = async (payload: any, userId: string) => {
     createdBy: userId,
   });
 
-  // 🎬 Trigger background FFmpeg HLS transcoding
+  // Trigger background FFmpeg HLS transcoding
   const sourceVideo = localVideoPath || result.videoUrl;
   if (sourceVideo) {
     transcodeVideoToHLS(result._id.toString(), sourceVideo).catch((err) => {
@@ -95,7 +95,7 @@ const getAllVideosFromDB = async (
     };
   }
 
-  // 🔔 Custom sort to ensure highlights are at the top, sorted by custom order
+  // Custom sort to ensure highlights are at the top, sorted by custom order
   const originalSort = query.sort;
   query.sort = originalSort ? `-isHighlight order ${originalSort}` : '-isHighlight order -createdAt';
 
@@ -182,17 +182,17 @@ const deleteVideoFromDB = async (id: string, userId: string, role?: string) => {
     throw new ApiError(StatusCodes.FORBIDDEN, 'Not allowed');
   }
 
-  // 🗑️ Delete raw S3 Video file
+  // Delete raw S3 Video file
   if (video.videoUrl) {
     await deleteFileFromS3(video.videoUrl);
   }
 
-  // 🗑️ Delete S3 Thumbnail (if stored on S3)
+  // Delete S3 Thumbnail (if stored on S3)
   if (video.thumbnail && (video.thumbnail.startsWith('http://') || video.thumbnail.startsWith('https://'))) {
     await deleteFileFromS3(video.thumbnail);
   }
 
-  // 🗑️ Delete all S3 HLS segments and playlist files under videos/hls/${id}/
+  // Delete all S3 HLS segments and playlist files under videos/hls/${id}/
   await deleteFolderFromS3(`videos/hls/${id}/`);
 
   return await Video.findByIdAndDelete(id);
@@ -231,7 +231,7 @@ const getPublicVideosFromDB = async (query: Record<string, any>) => {
     ],
   };
 
-  // 🔔 Custom sort to ensure highlights are at the top, sorted by custom order
+  // Custom sort to ensure highlights are at the top, sorted by custom order
   const originalSort = query.sort;
   query.sort = originalSort ? `-isHighlight order ${originalSort}` : '-isHighlight order -createdAt';
 

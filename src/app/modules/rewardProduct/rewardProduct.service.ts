@@ -189,7 +189,7 @@ const getRewardProductQrCodeFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Reward product not found');
   }
 
-  // ☕ ONLY ALLOW COFFEE PRODUCTS FOR QR CODE GENERATION
+  // ONLY ALLOW COFFEE PRODUCTS FOR QR CODE GENERATION
   if (rewardProduct.productType !== 'Coffee') {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
@@ -324,7 +324,7 @@ const redeemCoffeeRewardInDB = async (
   const awardPoints = Number(rewardProduct.point) || 0;
   const currentCoins = Number(user.engCoine) || 0;
 
-  // ♾️ Unlimited redemptions permitted, but guard against rapid double-taps / concurrent scans within 10 seconds
+  // Unlimited redemptions permitted, but guard against rapid double-taps / concurrent scans within 10 seconds
   if (!rewardProduct.redeemedUsers) {
     rewardProduct.redeemedUsers = [];
   }
@@ -353,7 +353,7 @@ const redeemCoffeeRewardInDB = async (
 
   await rewardProduct.save();
 
-  // 💰 ADD (+) COINS & UPDATE MARKET VALUE FOR THE PLAYER THROUGH LEDGER
+  // ADD (+) COINS & UPDATE MARKET VALUE FOR THE PLAYER THROUGH LEDGER
   if (awardPoints > 0) {
     try {
       const { user: updatedUser } = await recordCoinTransaction({

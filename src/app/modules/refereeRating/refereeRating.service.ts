@@ -221,7 +221,7 @@ const createEvaluationIntoDB = async (payload: any, userRole?: string) => {
     }
   }
 
-  // 🏆 Reward Man of the Match / Player of the Day
+  // Reward Man of the Match / Player of the Day
   if (payload.manOfTheMatch) {
     const targetMOTM = String(payload.manOfTheMatch);
     const alreadyHadSameMOTM = previousMOTM === targetMOTM;

@@ -45,7 +45,10 @@ const getMyTransfers = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getSingleTransfer = catchAsync(async (req: Request, res: Response) => {
-  const result = await TransferService.getSingleTransferFromDB(req.params.id as string);
+  const result = await TransferService.getSingleTransferFromDB(
+    req.params.id as string,
+    req.user
+  );
 
   sendResponse(res, {
     success: true,

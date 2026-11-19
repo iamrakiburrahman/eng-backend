@@ -125,7 +125,7 @@ const joinMarketToDB = async (
     player.lastName || player.userName || 'Player'
   }`.trim();
 
-  // 🔔 Notify player
+  // Notify player
   await NotificationQueueHelper.sendNotification(
     targetPlayerId,
     'You have successfully joined the Live Transfer Market. Clubs can now view your profile and submit transfer bids.',
@@ -136,7 +136,7 @@ const joinMarketToDB = async (
     'LiveTransferMarket'
   );
 
-  // 🔔 Notify parent
+  // Notify parent
   if (player.parentId) {
     await NotificationQueueHelper.sendNotification(
       player.parentId.toString(),
@@ -149,7 +149,7 @@ const joinMarketToDB = async (
     );
   }
 
-  // 🔔 Notify current manager
+  // Notify current manager
   if (currentManager) {
     await NotificationQueueHelper.sendNotification(
       currentManager.toString(),
@@ -459,7 +459,7 @@ const requestLiveTransferToDB = async (userId: string, payload: any) => {
   }`.trim();
   const buyingTeamName = toTeamData.teamName || 'New Club';
 
-  // 🔔 1. Notify Player
+  // 1. Notify Player
   await NotificationQueueHelper.sendNotification(
     playerId.toString(),
     `${buyingTeamName} has submitted a transfer bid for you on the Live Transfer Market. Please review and respond.`,
@@ -470,7 +470,7 @@ const requestLiveTransferToDB = async (userId: string, payload: any) => {
     'Transfer'
   );
 
-  // 🔔 2. Notify Parent (if minor player)
+  // 2. Notify Parent (if minor player)
   if (player.parentId) {
     await NotificationQueueHelper.sendNotification(
       player.parentId.toString(),
@@ -483,7 +483,7 @@ const requestLiveTransferToDB = async (userId: string, payload: any) => {
     );
   }
 
-  // 🔔 3. Notify Selling Club Managers
+  // 3. Notify Selling Club Managers
   const sellingManagers = await ManagerTeam.find({ team: fromTeam });
   for (const sm of sellingManagers) {
     await NotificationQueueHelper.sendNotification(
@@ -497,7 +497,7 @@ const requestLiveTransferToDB = async (userId: string, payload: any) => {
     );
   }
 
-  // 🔔 4. Notify Requesting Manager
+  // 4. Notify Requesting Manager
   await NotificationQueueHelper.sendNotification(
     userId,
     `Your transfer bid for ${playerName} has been submitted successfully and is awaiting review by both the player and the current club manager.`,
@@ -573,7 +573,7 @@ const respondByPlayerToDB = async (
     transfer.rejectReason = payload.reason || 'Declined by player/parent';
     await transfer.save();
 
-    // 🔔 Notify buying manager
+    // Notify buying manager
     await NotificationQueueHelper.sendNotification(
       transfer.requestedBy.toString(),
       `${playerName} has declined your transfer bid to join ${toTeamName}.`,
@@ -602,11 +602,11 @@ const respondByPlayerToDB = async (
   const isManagerApproved = transfer.managerApproval?.status === 'APPROVED';
 
   if (isManagerApproved) {
-    // 🌟 BOTH PARTIES HAVE APPROVED -> READY FOR ADMIN FINAL APPROVAL
+    // BOTH PARTIES HAVE APPROVED -> READY FOR ADMIN FINAL APPROVAL
     transfer.status = 'BOTH_APPROVED';
     await transfer.save();
 
-    // 🔔 Notify Admin
+    // Notify Admin
     await sendNotificationToAdmins({
       title: 'Live Transfer Approved by Both Parties',
       message: `Transfer for ${playerName} to ${toTeamName} has been approved by BOTH the player and current club manager. Final Admin approval is required.`,
@@ -614,7 +614,7 @@ const respondByPlayerToDB = async (
       metadata: { transferId: transfer._id, isLiveMarket: true },
     });
 
-    // 🔔 Notify buying manager
+    // Notify buying manager
     await NotificationQueueHelper.sendNotification(
       transfer.requestedBy.toString(),
       `Great news! Both ${playerName} and their current club manager have accepted your transfer bid. The transfer is now awaiting final Admin approval.`,
@@ -628,7 +628,7 @@ const respondByPlayerToDB = async (
     // Player approved, but manager is still pending
     await transfer.save();
 
-    // 🔔 Notify selling manager that player agreed
+    // Notify selling manager that player agreed
     if (transfer.fromTeam) {
       const sellingManagers = await ManagerTeam.find({ team: transfer.fromTeam });
       for (const sm of sellingManagers) {
@@ -715,7 +715,7 @@ const respondByManagerToDB = async (
     transfer.rejectReason = payload.reason || 'Declined by club manager';
     await transfer.save();
 
-    // 🔔 Notify buying manager
+    // Notify buying manager
     await NotificationQueueHelper.sendNotification(
       transfer.requestedBy.toString(),
       `The club manager has declined your transfer bid for ${playerName} to join ${toTeamName}.`,
@@ -726,7 +726,7 @@ const respondByManagerToDB = async (
       'Transfer'
     );
 
-    // 🔔 Notify player
+    // Notify player
     await NotificationQueueHelper.sendNotification(
       transfer.player.toString(),
       `Your club manager has declined the transfer bid from ${toTeamName}. You remain with your current club.`,
@@ -755,11 +755,11 @@ const respondByManagerToDB = async (
   const isPlayerApproved = transfer.playerApproval?.status === 'APPROVED';
 
   if (isPlayerApproved) {
-    // 🌟 BOTH PARTIES HAVE APPROVED -> READY FOR ADMIN FINAL APPROVAL
+    // BOTH PARTIES HAVE APPROVED -> READY FOR ADMIN FINAL APPROVAL
     transfer.status = 'BOTH_APPROVED';
     await transfer.save();
 
-    // 🔔 Notify Admin
+    // Notify Admin
     await sendNotificationToAdmins({
       title: 'Live Transfer Approved by Both Parties',
       message: `Transfer for ${playerName} to ${toTeamName} has been approved by BOTH the player and current club manager. Final Admin approval is required.`,
@@ -767,7 +767,7 @@ const respondByManagerToDB = async (
       metadata: { transferId: transfer._id, isLiveMarket: true },
     });
 
-    // 🔔 Notify buying manager
+    // Notify buying manager
     await NotificationQueueHelper.sendNotification(
       transfer.requestedBy.toString(),
       `Great news! Both ${playerName} and their current club manager have accepted your transfer bid. The transfer is now awaiting final Admin approval.`,
@@ -781,7 +781,7 @@ const respondByManagerToDB = async (
     // Manager approved, but player is still pending
     await transfer.save();
 
-    // 🔔 Notify player that manager has accepted the bid
+    // Notify player that manager has accepted the bid
     await NotificationQueueHelper.sendNotification(
       transfer.player.toString(),
       `Your club manager has approved the transfer bid from ${toTeamName}. Your approval is required.`,
@@ -935,7 +935,7 @@ const getBuyingRequestsFromDB = async (userId: string) => {
 };
 
 // 11. GET SINGLE LIVE TRANSFER DETAILS
-const getSingleLiveTransferFromDB = async (id: string) => {
+const getSingleLiveTransferFromDB = async (id: string, currentUser?: any) => {
   const transfer = await Transfer.findById(id)
     .populate('player', 'firstName lastName userName email profile position engCoine marketValue dateOfBirth height weight')
     .populate('fromTeam', 'teamName logo clubCode')
@@ -946,6 +946,18 @@ const getSingleLiveTransferFromDB = async (id: string) => {
 
   if (!transfer) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Transfer request not found.');
+  }
+
+  if (currentUser) {
+    const role = currentUser.role;
+    const currentUserId = (currentUser._id || currentUser.id)?.toString();
+    const isAdmin = role === USER_ROLES.ADMIN || role === USER_ROLES.SUPER_ADMIN;
+    const isPlayer = (transfer.player as any)?._id?.toString() === currentUserId || transfer.player?.toString() === currentUserId;
+    const isRequestedBy = (transfer.requestedBy as any)?._id?.toString() === currentUserId || transfer.requestedBy?.toString() === currentUserId;
+
+    if (!isAdmin && !isPlayer && !isRequestedBy) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'You are not authorized to view this live transfer details');
+    }
   }
 
   return transfer;

@@ -9,7 +9,7 @@ export const handleAccountUpdatedEvent = async (data: { id: string; charges_enab
     const existingUser = await User.findOne({ 'accountInformation.stripeAccountId': data.id });
 
     if (!existingUser) {
-        console.warn(`⚠️ User not found for Stripe account ID: ${data.id}`);
+        console.warn(`User not found for Stripe account ID: ${data.id}`);
         return;
     }
 

@@ -27,7 +27,7 @@ router.get(
 
 router.get("/schedule-dates", MatchController.getMatchScheduleDates);
 
-// ⚙️ DYNAMIC FEEDBACK WINDOW SETTING (GET & ADMIN UPDATE)
+// DYNAMIC FEEDBACK WINDOW SETTING (GET & ADMIN UPDATE)
 router.get(
   "/feedback-setting",
   auth(...ROLE_GROUPS.All),
@@ -72,28 +72,28 @@ router.patch(
   MatchController.toggleMatchStatus,
 );
 
-// ⏱️ MATCH TIMER CONTROL (START, PAUSE, RESUME, FINISH)
+// ⏱MATCH TIMER CONTROL (START, PAUSE, RESUME, FINISH)
 router.patch(
   "/:id/timer",
   auth(USER_ROLES.REFEREE, USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
   MatchController.updateMatchTimer,
 );
 
-// ⚽ MODIFY SCORE (ADMIN/SUPER ADMIN/REFEREE)
+// MODIFY SCORE (ADMIN/SUPER ADMIN/REFEREE)
 router.patch(
   "/:id/modify-score",
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.REFEREE),
   MatchController.modifyMatchScore,
 );
 
-// 🔄 DIRECT STATUS UPDATE (ADMIN / SUPER ADMIN / REFEREE)
+// DIRECT STATUS UPDATE (ADMIN / SUPER ADMIN / REFEREE)
 router.patch(
   "/:id/status",
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.REFEREE),
   MatchController.updateMatchStatus,
 );
 
-// 🧤 CLEAN SHEET MANAGEMENT (AUTO + MANUAL OVERRIDE)
+// CLEAN SHEET MANAGEMENT (AUTO + MANUAL OVERRIDE)
 router.get(
   "/:id/clean-sheets",
   auth(...ROLE_GROUPS.All),

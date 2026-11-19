@@ -13,7 +13,7 @@ export interface IRecordTeamCoinTransactionParams {
   category: TEAM_COIN_CATEGORY;
   title: string;
   description?: string;
-  minBalanceAfter?: number; // 🔒 Minimum balance required to remain after deduction
+  minBalanceAfter?: number; // Minimum balance required to remain after deduction
   matchId?: string | Types.ObjectId;
   opponentTeamId?: string | Types.ObjectId;
   transferredPlayerId?: string | Types.ObjectId;
@@ -73,7 +73,7 @@ export const recordTeamCoinTransaction = async (
   let balanceAfter: number;
 
   if (signedAmount < 0) {
-    // 🔒 Concurrency-safe atomic deduction: check and deduct in one atomic operation
+    // Concurrency-safe atomic deduction: check and deduct in one atomic operation
     const minRequired = (minBalanceAfter || 0) + Math.abs(signedAmount);
 
     team = await Team.findOneAndUpdate(
@@ -98,7 +98,7 @@ export const recordTeamCoinTransaction = async (
     balanceAfter = Number(team.coin) || 0;
     balanceBefore = balanceAfter - signedAmount;
   } else {
-    // 🔒 Concurrency-safe atomic credit
+    // Concurrency-safe atomic credit
     team = await Team.findOneAndUpdate(
       { _id: teamId },
       { $inc: { coin: signedAmount } },

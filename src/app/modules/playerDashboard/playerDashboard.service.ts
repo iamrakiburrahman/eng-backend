@@ -17,7 +17,7 @@ import { LiveTransferMarket } from "../liveTransferMarket/liveTransferMarket.mod
 const getPlayerDashboardFromDB = async (playerId: string) => {
   const playerObjectId = new mongoose.Types.ObjectId(playerId);
 
-  // 👤 PLAYER INFO (Filter by PLAYER / TOURNAMENT_PLAYER / OTHER_CLUBS roles)
+  // PLAYER INFO (Filter by PLAYER / TOURNAMENT_PLAYER / OTHER_CLUBS roles)
   const player = await User.findOne({
     _id: playerObjectId,
     role: { $in: [USER_ROLES.PLAYER, USER_ROLES.TOURNAMENT_PLAYER, USER_ROLES.OTHER_CLUBS] },
@@ -50,10 +50,10 @@ const getPlayerDashboardFromDB = async (playerId: string) => {
   // Optional: mapping _id to userId for consistency
   playerData.userId = playerObjectId;
 
-  // ⚽ MATCH STATS (Goals, Assists, Clean Sheets, Player Of The Day, Yellow Card, Red Card)
+  // MATCH STATS (Goals, Assists, Clean Sheets, Player Of The Day, Yellow Card, Red Card)
   const stats = await getPlayerStatsSummary(playerObjectId);
 
-  // 📊 RECENT MATCHES
+  // RECENT MATCHES
   const recentMatches = await MatchResult.find({
     player: playerObjectId,
   })

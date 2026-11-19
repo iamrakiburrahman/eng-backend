@@ -100,7 +100,7 @@ const getUserProfile = catchAsync(async (req: Request, res: Response) => {
 const updateProfile = catchAsync(async (req: Request, res: Response) => {
     const user = req.user;
 
-    // 🚨 AUTH CHECK
+    // AUTH CHECK
     if (!user) {
         throw new ApiError(401, "Unauthorized user - token invalid or missing");
     }
@@ -111,7 +111,7 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
         profile = `/images/${req.files.image[0].filename}`;
     }
 
-    // ✅ parse JSON string safely & enforce editable field allowlist
+    // parse JSON string safely & enforce editable field allowlist
     let parsedData: any = {};
     if (req.body?.data) {
         try {
@@ -148,7 +148,7 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
 const createPlayer = catchAsync(async (req: Request, res: Response) => {
     const user = req.user as any;
 
-    // 🚨 AUTH CHECK
+    // AUTH CHECK
     if (!user?._id) {
         throw new ApiError(401, "Unauthorized user - token invalid or missing");
     }
@@ -156,7 +156,7 @@ const createPlayer = catchAsync(async (req: Request, res: Response) => {
     const userId = user._id;
     const role = user.role;
 
-    // 🚨 FILES (single field: document)
+    // FILES (single field: document)
     const files = req.files as any;
 
     const documentFiles =
@@ -164,12 +164,12 @@ const createPlayer = catchAsync(async (req: Request, res: Response) => {
             return `/documents/${file.filename}`;
         }) || [];
 
-    // 🚨 BODY CHECK
+    // BODY CHECK
     if (!req.body) {
         throw new ApiError(400, "Request body is missing");
     }
 
-    // 🚀 PARSE DATA
+    // PARSE DATA
     let parsedData: any = {};
 
     try {
@@ -181,7 +181,7 @@ const createPlayer = catchAsync(async (req: Request, res: Response) => {
         throw new ApiError(400, "Invalid JSON format in request body");
     }
 
-    // // 🔥 REQUIRED FIELD CHECK
+    // // REQUIRED FIELD CHECK
     // const requiredFields = [
     //     "firstName",
     //     "lastName",
@@ -200,7 +200,7 @@ const createPlayer = catchAsync(async (req: Request, res: Response) => {
     //     );
     // }
 
-    // 🚨 PLAYER ROLE SPECIFIC VALIDATION
+    // PLAYER ROLE SPECIFIC VALIDATION
     if (role === "PLAYER") {
       const playerRequiredFields = ["ageGroup", "selectTeam"];
 
@@ -229,7 +229,7 @@ const createPlayer = catchAsync(async (req: Request, res: Response) => {
         parsedData.phone = parsedData.phoneNumber;
     }
 
-    // 🚀 FINAL PAYLOAD (allowlisted fields only)
+    // FINAL PAYLOAD (allowlisted fields only)
     const safeParsed = pick(parsedData, USER_SELF_EDITABLE_FIELDS);
     const data: any = {
         userId,
@@ -250,7 +250,7 @@ const createPlayer = catchAsync(async (req: Request, res: Response) => {
 const updateChieldInfo = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as any;
 
-  // ✅ AUTH CHECK
+  // AUTH CHECK
   if (!user?._id) {
     throw new ApiError(
       401,
@@ -260,7 +260,7 @@ const updateChieldInfo = catchAsync(async (req: Request, res: Response) => {
 
   const userId = user._id;
 
-  // ✅ FILE HANDLE
+  // FILE HANDLE
   const files = req.files as any;
 
   let documentFiles: string[] = [];
@@ -271,7 +271,7 @@ const updateChieldInfo = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // ✅ SAFE JSON PARSE
+  // SAFE JSON PARSE
   let parsedData: any = {};
 
   try {
@@ -290,7 +290,7 @@ const updateChieldInfo = catchAsync(async (req: Request, res: Response) => {
     parsedData.phone = parsedData.phoneNumber;
   }
 
-  // ✅ UPDATE DATA (allowlisted fields only)
+  // UPDATE DATA (allowlisted fields only)
   const updateData: any = {
     ...pick(parsedData, USER_SELF_EDITABLE_FIELDS),
     document: documentFiles,
@@ -310,7 +310,7 @@ const updateChieldInfo = catchAsync(async (req: Request, res: Response) => {
 const updatePlayer = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as any;
 
-  // ✅ AUTH CHECK
+  // AUTH CHECK
   if (!user?._id) {
     throw new ApiError(
       401,
@@ -320,7 +320,7 @@ const updatePlayer = catchAsync(async (req: Request, res: Response) => {
 
   const userId = user._id;
 
-  // ✅ FILE HANDLE
+  // FILE HANDLE
   const files = req.files as any;
 
   let documentFiles: string[] = [];
@@ -331,7 +331,7 @@ const updatePlayer = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // ✅ SAFE JSON PARSE
+  // SAFE JSON PARSE
   let parsedData: any = {};
 
   try {
@@ -350,17 +350,17 @@ const updatePlayer = catchAsync(async (req: Request, res: Response) => {
     parsedData.phone = parsedData.phoneNumber;
   }
 
-  // ✅ UPDATE DATA (allowlisted fields only)
+  // UPDATE DATA (allowlisted fields only)
   const updateData: any = {
     ...pick(parsedData, USER_SELF_EDITABLE_FIELDS),
   };
 
-  // ✅ DOCUMENT ADD
+  // DOCUMENT ADD
   if (documentFiles.length > 0) {
     updateData.document = documentFiles;
   }
 
-  // 🔥 UPDATE PLAYER
+  // UPDATE PLAYER
   const result = await UserService.updatePlayerByUserId(
     userId,
     updateData

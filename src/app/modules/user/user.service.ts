@@ -138,7 +138,7 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
     { $set: { authentication } },
   );
 
-  // 🔔 Notify all admins: new user registered
+  // Notify all admins: new user registered
   // await sendNotificationToAdmins({
   //   title: "New User Registered",
   //   message: `A new user (${createUser.email}) has registered on the platform.`,
@@ -257,7 +257,7 @@ const getUserProfileFromDB = async (user: JwtPayload) => {
     isSubscribed: Boolean(subscription || isExistUser.isSubscribed),
     hasAccess: Boolean(subscription || isExistUser.hasAccess),
 
-    // ✅ Screen 2 profile details completion status
+    // Screen 2 profile details completion status
     isDetailsSubmitted,
 
     subscription: subscription
@@ -283,7 +283,7 @@ const updateChieldInfoToDB = async (id: string, payload: any, currentUser?: any)
     throw new ApiError(StatusCodes.NOT_FOUND, "Child user not found");
   }
 
-  // 🔒 IDOR / BOLA Prevention: Verify caller is the child's parent or an Administrator
+  // IDOR / BOLA Prevention: Verify caller is the child's parent or an Administrator
   if (currentUser) {
     const callerId = currentUser._id?.toString() || currentUser.id?.toString();
     const isParent =
@@ -314,7 +314,7 @@ const updateChieldInfoToDB = async (id: string, payload: any, currentUser?: any)
       safePayload.selectTeam = null;
     }
 
-    // 🔒 Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
+    // Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
     const callerRole = currentUser?.role;
     const isSuperOrAdmin =
       callerRole === USER_ROLES.SUPER_ADMIN || callerRole === USER_ROLES.ADMIN;
@@ -435,7 +435,7 @@ const createPlayerToDB = async (payload: any) => {
 
   const role = user?.role || "USER";
 
-  // 🔔 Notify all admins: new player/referee/manager/club profile created
+  // Notify all admins: new player/referee/manager/club profile created
   await sendNotificationToAdmins({
     title: `New ${role} Profile Submitted`,
     message: `A ${role.toLowerCase()} (${result.firstName} ${result.lastName}) has submitted their profile for review.`,
@@ -468,7 +468,7 @@ const updatePlayerByUserId = async (userId: string, payload: any) => {
       safePayload.selectTeam = null;
     }
 
-    // 🔒 Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
+    // Prevent unauthorized club switching: If already registered to a team, must use Transfer Market
     if (
       isExist.selectTeam &&
       safePayload.selectTeam &&
@@ -637,11 +637,14 @@ const getRefereeByUserId = async (userId: string) => {
 };
 
 const getOtherClubByUserId = async (userId: string) => {
-  const result = await User.findById(userId).lean();
+  const result = await User.findById(userId).select("-authentication -password").lean();
 
   if (!result) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Other club not found");
   }
+
+  delete (result as any).authentication;
+  delete (result as any).password;
 
   return { ...result, userId: result?._id };
 };
@@ -649,6 +652,7 @@ const getOtherClubByUserId = async (userId: string) => {
 const getPlayerDetailsByUserId = async (userId: string) => {
   const [result, activeSub, stats] = await Promise.all([
     User.findById(userId)
+      .select("-authentication -password")
       .populate({
         path: "selectTeam",
         select: "teamName shortName teamLogo _id",
@@ -667,6 +671,9 @@ const getPlayerDetailsByUserId = async (userId: string) => {
   if (!result) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Player/User not found");
   }
+
+  delete (result as any).authentication;
+  delete (result as any).password;
 
   const teamData: any = result.selectTeam;
   const pkg: any = activeSub?.package;
@@ -846,7 +853,7 @@ const approveOrRejectUser = async (
     { new: true },
   );
 
-  // ⚽ AUTO-ASSIGN MANAGER TO TEAM ON APPROVAL
+  // AUTO-ASSIGN MANAGER TO TEAM ON APPROVAL
   if (
     status === "APPROVED" &&
     user.role === USER_ROLES.MANAGER &&

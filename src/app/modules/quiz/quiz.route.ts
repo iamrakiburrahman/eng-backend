@@ -46,7 +46,7 @@ router.patch(
 
 router
   .route('/:id')
-  .get(QuizController.getSingleQuiz)
+  .get(auth(false), QuizController.getSingleQuiz)
   .patch(
     auth(...ROLE_GROUPS.ADMINS),
     fileUploadHandler(),

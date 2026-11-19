@@ -57,7 +57,7 @@ const matchResultSchema = new Schema(
         },
       },
 
-      // 🔥 NEW: optional assist
+      // NEW: optional assist
       assist: {
         type: Schema.Types.ObjectId,
         ref: 'User',

@@ -404,7 +404,7 @@ export async function checkAndSendUpcomingMatchReminders(): Promise<IMatchRemind
 
     return { processedMatches, totalRecipients };
   } catch (error) {
-    logger.error(colors.red('❌ Error in checkAndSendUpcomingMatchReminders:'), error);
+    logger.error(colors.red('Error in checkAndSendUpcomingMatchReminders:'), error);
     return { processedMatches, totalRecipients };
   }
 }

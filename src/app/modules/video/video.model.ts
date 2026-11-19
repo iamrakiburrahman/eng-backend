@@ -22,7 +22,7 @@ const videoSchema = new Schema<IVideo, VideoModel>(
       required: true,
     },
 
-    // 🎥 VIDEO FILE
+    // VIDEO FILE
     videoUrl: {
       type: String,
       required: true,

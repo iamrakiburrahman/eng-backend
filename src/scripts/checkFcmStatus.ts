@@ -25,7 +25,7 @@ async function run() {
       fcmTokenPrefix: sample.fcmToken?.substring(0, 15) + '...',
     });
   } else {
-    console.log('⚠️ ZERO users have an FCM token in the live database!');
+    console.log('ZERO users have an FCM token in the live database!');
   }
 
   await mongoose.disconnect();

@@ -41,7 +41,7 @@ const loginUserFromDB = async (payload: ILoginData) => {
     );
   }
 
-  // ✅ Only MANAGER & REFEREE require admin account approval before login
+  // Only MANAGER & REFEREE require admin account approval before login
   // Parent (Account Owner) & OTHER_CLUBS log in immediately upon email verification
   //   const rolesRequiringApproval = ['MANAGER', 'REFEREE'];
   //   if (
@@ -157,7 +157,7 @@ const verifyEmailToDB = async (payload: IVerifyEmail) => {
   let data;
 
   // =========================
-  // ✅ FIRST TIME EMAIL VERIFY → LOGIN TOKEN
+  // FIRST TIME EMAIL VERIFY → LOGIN TOKEN
   // =========================
   if (!isExistUser.verified) {
     const updatePayload: any = {
@@ -181,7 +181,7 @@ const verifyEmailToDB = async (payload: IVerifyEmail) => {
 
     await User.findOneAndUpdate({ _id: isExistUser._id }, updatePayload);
 
-    // 🔥 SAME LOGIN TOKEN LIKE LOGIN API
+    // SAME LOGIN TOKEN LIKE LOGIN API
     data = jwtHelper.createToken(
       {
         id: isExistUser._id,
@@ -192,7 +192,7 @@ const verifyEmailToDB = async (payload: IVerifyEmail) => {
       "7d",
     );
 
-    // 🔔 Notify user: email verified via background queue
+    // Notify user: email verified via background queue
     await NotificationQueueHelper.sendNotification(
       isExistUser._id.toString(),
       "Welcome! Your email has been verified. You can now access your account.",
@@ -204,7 +204,7 @@ const verifyEmailToDB = async (payload: IVerifyEmail) => {
   }
 
   // =========================
-  // 🔁 FORGOT PASSWORD FLOW → DB TOKEN
+  // FORGOT PASSWORD FLOW → DB TOKEN
   // =========================
   else {
     await User.findOneAndUpdate(
@@ -482,8 +482,8 @@ const socialLoginFromDB = async (payload: ISocialLoginPayload) => {
       firstName,
       lastName,
       profile: picture || undefined,
-      role: USER_ROLES.UNASSIGNED, // 👈 New accounts start as UNASSIGNED so user selects role
-      verified: true,              // 👈 Google / Apple accounts are pre-verified
+      role: USER_ROLES.UNASSIGNED, // New accounts start as UNASSIGNED so user selects role
+      verified: true,              // Google / Apple accounts are pre-verified
       authProvider: isApple ? "apple" : "google",
       firebaseUid: uid,
       appId: uid,

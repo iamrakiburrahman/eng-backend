@@ -28,9 +28,9 @@ export async function connectServices(): Promise<void> {
                maxPoolSize: 25,
                minPoolSize: 5,
           });
-          logger.info(colors.green('🚀 Database connected successfully'));
+          logger.info(colors.green('Database connected successfully'));
      } catch (dbError) {
-          errorLogger.error(colors.red('🤢 Failed to connect to Database:'), dbError);
+          errorLogger.error(colors.red('Failed to connect to Database:'), dbError);
           throw dbError;
      }
 
@@ -39,7 +39,7 @@ export async function connectServices(): Promise<void> {
           try {
                await seedSuperAdmin();
           } catch (seedError) {
-               errorLogger.error(colors.red('🤢 Failed to seed Super Admin:'), seedError);
+               errorLogger.error(colors.red('Failed to seed Super Admin:'), seedError);
                throw seedError;
           }
      }
@@ -48,7 +48,7 @@ export async function connectServices(): Promise<void> {
      try {
           await connectToRedis();
      } catch (redisError) {
-          errorLogger.error(colors.red('🤢 Failed to connect to Redis:'), redisError);
+          errorLogger.error(colors.red('Failed to connect to Redis:'), redisError);
           throw redisError;
      }
 
@@ -62,7 +62,7 @@ export async function connectServices(): Promise<void> {
                await CleanupQueueHelper.scheduleRepeatableJobs();
           }
      } catch (bullMQError) {
-          errorLogger.error(colors.red('🤢 Failed to initialize BullMQ:'), bullMQError);
+          errorLogger.error(colors.red('Failed to initialize BullMQ:'), bullMQError);
           throw bullMQError;
      }
 
@@ -111,10 +111,10 @@ export async function initSocketServer(server: http.Server): Promise<void> {
                cors: socketCors,
                adapter: createAdapter(pubClient, subClient),
           });
-          logger.info(colors.green('🚀 Socket.io initialized with Redis Adapter'));
+          logger.info(colors.green('Socket.io initialized with Redis Adapter'));
      } catch (redisAdapterError) {
           errorLogger.error(
-               colors.red('⚠️ Socket.io Redis Adapter failed. Falling back to memory adapter:'),
+               colors.red('Socket.io Redis Adapter failed. Falling back to memory adapter:'),
                redisAdapterError,
           );
           io = new Server(server, {
@@ -135,7 +135,7 @@ export async function closeServices(): Promise<void> {
 
      try {
           await mongoose.connection.close();
-          logger.info(colors.green('✅ MongoDB connection closed gracefully'));
+          logger.info(colors.green('MongoDB connection closed gracefully'));
      } catch (err) {
           errorLogger.error('Error closing MongoDB connection:', err);
      }
@@ -164,7 +164,7 @@ export async function gracefulShutdown(signal: string, server: http.Server | any
                logger.info(colors.gray('HTTP server closed cleanly.'));
                try {
                     await closeServices();
-                    logger.info(colors.bgGreen.white('👋 Graceful shutdown complete.'));
+                    logger.info(colors.bgGreen.white('Graceful shutdown complete.'));
                } catch (err) {
                     errorLogger.error('Error during graceful shutdown cleanup:', err);
                }

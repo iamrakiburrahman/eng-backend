@@ -33,7 +33,7 @@ const sendEmail = async (values: ISendEmail): Promise<void> => {
 
      try {
           if (isProduction) {
-               // 🚀 Production: Use Brevo
+               // Production: Use Brevo
                if (!config.email.apiKey) {
                     throw new Error('Brevo API key (API_KEY) is missing in production environment');
                }
@@ -57,7 +57,7 @@ const sendEmail = async (values: ISendEmail): Promise<void> => {
 
                logger.info(`[Brevo] Email sent successfully to ${values.to} (MessageId: ${result.messageId})`);
           } else {
-               // 🛠️ Development / Non-Production: Use SMTP (NodeMailer)
+               // Development / Non-Production: Use SMTP (NodeMailer)
                const transporter = createSmtpTransporter();
                const senderEmail = config.email.from || config.email.user || 'rakibhassan305@gmail.com';
                const senderName = config.email.emailHeader || 'Example';

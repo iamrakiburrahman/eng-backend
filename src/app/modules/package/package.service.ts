@@ -68,9 +68,9 @@ const createPackageToDB = async (payload: any): Promise<IPackage | null> => {
         throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create subscription product");
     }
 
-    // ✅ FIX: map correctly
+    // FIX: map correctly
     payload.stripeProductId = product.productId;
-    payload.stripePriceId = product.priceId;   // 🔥 MUST ADD THIS
+    payload.stripePriceId = product.priceId;   // MUST ADD THIS
 
     const result = await Package.create(payload);
 

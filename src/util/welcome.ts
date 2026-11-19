@@ -7,11 +7,11 @@ export const welcome = () => {
 
      // Time-based greeting
      if (hours < 12) {
-          greeting = "Good morning! 🌞 Let's get the day started!";
+          greeting = "Good morning! Let's get the day started!";
      } else if (hours < 18) {
-          greeting = 'Good afternoon! 🌤️ Keep the momentum going!';
+          greeting = 'Good afternoon! Keep the momentum going!';
      } else {
-          greeting = 'Good evening! 🌙 Hope you had a fantastic day!';
+          greeting = 'Good evening! Hope you had a fantastic day!';
      }
 
      return `
@@ -43,7 +43,7 @@ export const welcome = () => {
                 <div class="header-section">
                     <div class="server-icon">
                         <div class="server-glow"></div>
-                        🚀
+                        
                     </div>
                     <h1 class="main-title">
                         <span class="title-line">${config.server.name?.toUpperCase() || 'SERVER'}</span>
@@ -85,22 +85,22 @@ export const welcome = () => {
                 <!-- Features Grid -->
                 <div class="features-grid">
                     <div class="feature-card">
-                        <div class="feature-icon">⚡</div>
+                        <div class="feature-icon"></div>
                         <h3>Lightning Fast</h3>
                         <p>Optimized for speed</p>
                     </div>
                     <div class="feature-card">
-                        <div class="feature-icon">🔒</div>
+                        <div class="feature-icon"></div>
                         <h3>Secure</h3>
                         <p>Protected & encrypted</p>
                     </div>
                     <div class="feature-card">
-                        <div class="feature-icon">🌐</div>
+                        <div class="feature-icon"></div>
                         <h3>Global</h3>
                         <p>Worldwide accessibility</p>
                     </div>
                     <div class="feature-card">
-                        <div class="feature-icon">🎯</div>
+                        <div class="feature-icon"></div>
                         <h3>Precise</h3>
                         <p>Accurate responses</p>
                     </div>
@@ -109,18 +109,18 @@ export const welcome = () => {
                 <!-- Developer Section -->
                 <div class="developer-section">
                     <div class="developer-card interactive">
-                        <div class="developer-title">Crafted with ❤️ by</div>
+                        <div class="developer-title">Crafted with by</div>
                         <div class="developer-name">Md. Rakibur Rahman</div>
-                        <div class="developer-badge">✨ Full Stack Developer</div>
+                        <div class="developer-badge">Full Stack Developer</div>
                     </div>
                 </div>
 
                 <!-- Footer -->
                 <div class="footer-section">
                     <div class="footer-message">
-                        <span class="sparkle">✨</span>
+                        <span class="sparkle"></span>
                         Ready to serve your requests with style!
-                        <span class="sparkle">✨</span>
+                        <span class="sparkle"></span>
                     </div>
                 </div>
             </div>

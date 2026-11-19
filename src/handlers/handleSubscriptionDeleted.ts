@@ -51,7 +51,7 @@ export const handleSubscriptionDeleted = async (data: any) => {
                     );
                 }
 
-                // 🔔 Send notification to User about subscription cancellation
+                // Send notification to User about subscription cancellation
                 await sendNotification({
                     receiver: existingUser._id.toString(),
                     title: "Subscription Cancelled",
@@ -61,6 +61,6 @@ export const handleSubscriptionDeleted = async (data: any) => {
             }
         }
     } else {
-        console.warn(`⚠️ Subscription not found for cancellation: ${subscription.id}`);
+        console.warn(`Subscription not found for cancellation: ${subscription.id}`);
     }
 };

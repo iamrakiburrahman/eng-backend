@@ -1,6 +1,7 @@
 import express from 'express';
 import { ROLE_GROUPS, USER_ROLES } from '../../../enums/user';
 import auth from '../../middlewares/auth';
+import { authLimiter } from '../../middlewares/rateLimiter';
 import { TournamentController } from './tournament.controller';
 
 const router = express.Router();
@@ -8,6 +9,7 @@ const router = express.Router();
 // REDEEM PRIZE COINS BY SCANNING QR CODE (PLAYER / AUTH USER)
 router.post(
   '/redeem-reward',
+  authLimiter,
   auth(...ROLE_GROUPS.All),
   TournamentController.redeemTournamentReward
 );

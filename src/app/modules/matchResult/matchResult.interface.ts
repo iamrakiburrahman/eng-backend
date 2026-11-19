@@ -18,7 +18,7 @@ export interface IMatchResult {
     | 'clean_sheet'
     | 'player_of_the_day';
 
-  // 🔥 NEW: event details meta
+  // NEW: event details meta
   eventMeta?: {
     goalType?: 'normal' | 'penalty' | 'header' | 'own_goal' | 'free_kick';
     cardType?: 'yellow' | 'red';

@@ -27,7 +27,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
 
   const fromTeam = player.selectTeam || null;
 
-  // 🛑 CANNOT REQUEST OWN TEAM'S PLAYER
+  // CANNOT REQUEST OWN TEAM'S PLAYER
   if (fromTeam && fromTeam.toString() === payload.toTeam.toString()) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
@@ -35,7 +35,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
     );
   }
 
-  // 💰 Fetch dynamic economy settings
+  // Fetch dynamic economy settings
   const [clubEconomy, playerEconomy] = await Promise.all([
     ClubEconomy.findOne(),
     PlayerEconomy.findOne(),
@@ -47,7 +47,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
       ? clubEconomy.minReserveCoins
       : clubEconomy?.startingBudget || 100000;
 
-  // 💰 CHECK BUYING TEAM COIN BALANCE (ONLY FOR REGULAR PLAYERS WITH A FROM-TEAM)
+  // CHECK BUYING TEAM COIN BALANCE (ONLY FOR REGULAR PLAYERS WITH A FROM-TEAM)
   const isTrialPlayer = !fromTeam || player.role === USER_ROLES.OTHER_CLUBS;
   const playerCost = isTrialPlayer
     ? 0
@@ -89,7 +89,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
     throw new ApiError(StatusCodes.FORBIDDEN, "Not your team");
   }
 
-  // 🛑 Check duplicate pending transfer request
+  // Check duplicate pending transfer request
   const existingPending = await Transfer.findOne({
     player: payload.player,
     toTeam: payload.toTeam,
@@ -115,7 +115,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
   const playerName = `${player.firstName || ""} ${player.lastName || player.userName || "Player"}`.trim();
   const buyingTeamName = toTeamData.teamName || "New Club";
 
-  // 1.1 🔔 Notify Selling Club Managers (each club needs to receive a notification)
+  // 1.1 Notify Selling Club Managers (each club needs to receive a notification)
   if (fromTeam) {
     const sellingManagers = await ManagerTeam.find({ team: fromTeam });
     for (const sm of sellingManagers) {
@@ -131,7 +131,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
     }
   }
 
-  // 1.1 🔔 Notify Parents (plus the parents)
+  // 1.1 Notify Parents (plus the parents)
   if (player.parentId) {
     await NotificationQueueHelper.sendNotification(
       player.parentId.toString(),
@@ -144,7 +144,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
     );
   }
 
-  // 1.1 🔔 Notify Buying Club Manager (confirmation)
+  // 1.1 Notify Buying Club Manager (confirmation)
   await NotificationQueueHelper.sendNotification(
     userId,
     `Your transfer bid for ${playerName} has been submitted successfully and is awaiting review.`,
@@ -155,7 +155,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
     "Transfer",
   );
 
-  // 🔔 Notify player: transfer request submitted via background queue helper
+  // Notify player: transfer request submitted via background queue helper
   await NotificationQueueHelper.sendNotification(
     payload.player.toString(),
     `A transfer request has been submitted for you by ${buyingTeamName}. Awaiting approval.`,
@@ -166,7 +166,7 @@ const createTransferToDB = async (payload: any, userId: string) => {
     "Transfer",
   );
 
-  // 🔔 Notify admins: new transfer request
+  // Notify admins: new transfer request
   await sendNotificationToAdmins({
     title: "New Transfer Request",
     message: `A new transfer request has been submitted for ${playerName} by ${buyingTeamName} (${transferType}). Please review.`,
@@ -258,12 +258,12 @@ const getAllTransfersFromDB = async (query: Record<string, any>) => {
     Transfer.countDocuments(filter),
   ]);
 
-  // 🔥 STEP 1: collect all user ids
+  // STEP 1: collect all user ids
   const userIds = transfers
     .flatMap((t: any) => [t.player?._id, t.requestedBy?._id, t.approvedBy?._id])
     .filter(Boolean);
 
-  // 🔥 STEP 2: get UserDetails (firstName + lastName)
+  // STEP 2: get UserDetails (firstName + lastName)
   const details = await User.find({
     _id: { $in: userIds },
   });
@@ -271,7 +271,7 @@ const getAllTransfersFromDB = async (query: Record<string, any>) => {
   const getDetails = (id: string) =>
     details.find((d) => d._id.toString() === id?.toString());
 
-  // 🔥 STEP 3: FLAT RESPONSE
+  // STEP 3: FLAT RESPONSE
   const result = transfers.map((t: any) => {
     const playerD = getDetails(t.player?._id);
     const reqD = getDetails(t.requestedBy?._id);
@@ -406,7 +406,7 @@ const getMyTransfersFromDB = async (userId: string) => {
 };
 
 // SINGLE
-const getSingleTransferFromDB = async (id: string) => {
+const getSingleTransferFromDB = async (id: string, currentUser?: any) => {
   const transfer = await Transfer.findById(id)
     .populate("player")
     .populate("fromTeam")
@@ -414,6 +414,18 @@ const getSingleTransferFromDB = async (id: string) => {
 
   if (!transfer) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Transfer not found");
+  }
+
+  if (currentUser) {
+    const role = currentUser.role;
+    const currentUserId = (currentUser._id || currentUser.id)?.toString();
+    const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
+    const isPlayer = (transfer.player as any)?._id?.toString() === currentUserId || transfer.player?.toString() === currentUserId;
+    const isRequestedBy = (transfer.requestedBy as any)?._id?.toString() === currentUserId || transfer.requestedBy?.toString() === currentUserId;
+
+    if (!isAdmin && !isPlayer && !isRequestedBy) {
+      throw new ApiError(StatusCodes.FORBIDDEN, "You are not authorized to view this transfer request");
+    }
   }
 
   return transfer;
@@ -441,7 +453,7 @@ const approveTransferToDB = async (id: string, user: any) => {
   const toTeamName = toTeamObj?.teamName || "New Club";
   const fromTeamName = fromTeamObj?.teamName || "Current Club";
 
-  // 🛑 PHASE 1: MANAGER APPROVAL (Step 1.2: Club needs to accept)
+  // PHASE 1: MANAGER APPROVAL (Step 1.2: Club needs to accept)
   if (userRole === USER_ROLES.MANAGER) {
     if (transfer.fromTeam) {
       const isFromTeamManager = await ManagerTeam.findOne({
@@ -508,7 +520,7 @@ const approveTransferToDB = async (id: string, user: any) => {
       "Transfer",
     );
 
-    // 🔔 Notify Admins for final approval
+    // Notify Admins for final approval
     await sendNotificationToAdmins({
       title: "Transfer Approved by Club Manager",
       message: `${fromTeamName} manager has accepted the transfer bid for ${playerName}. Final Admin approval is required.`,
@@ -519,7 +531,7 @@ const approveTransferToDB = async (id: string, user: any) => {
     return transfer;
   }
 
-  // 🛑 PHASE 2: ADMIN / SUPER_ADMIN FINAL APPROVAL (TEAM SWAP & COIN TRANSFER)
+  // PHASE 2: ADMIN / SUPER_ADMIN FINAL APPROVAL (TEAM SWAP & COIN TRANSFER)
   if (userRole === USER_ROLES.ADMIN || userRole === USER_ROLES.SUPER_ADMIN) {
     if (transfer.status === "APPROVED") {
       throw new ApiError(
@@ -558,7 +570,7 @@ const approveTransferToDB = async (id: string, user: any) => {
 
     const isTrialPlayer =
       !transfer.fromTeam || userDetails.role === USER_ROLES.OTHER_CLUBS;
-    // 💰 1. Dynamic economy check from ClubEconomy and PlayerEconomy
+    // 1. Dynamic economy check from ClubEconomy and PlayerEconomy
     const [clubEconomy, playerEconomy] = await Promise.all([
       ClubEconomy.findOne(),
       PlayerEconomy.findOne(),
@@ -653,7 +665,7 @@ const approveTransferToDB = async (id: string, user: any) => {
     transfer.approvedBy = userId as any;
     await transfer.save();
 
-    // 🌟 If Live Transfer Market, mark listing as TRANSFERRED and delist player
+    // If Live Transfer Market, mark listing as TRANSFERRED and delist player
     if (transfer.isLiveMarket) {
       await LiveTransferMarket.updateMany(
         { player: userDetails._id, status: { $in: ["ACTIVE", "PENDING_TRANSFER"] } },
@@ -802,7 +814,7 @@ const rejectTransferToDB = async (
     ? `${player.firstName || ""} ${player.lastName || player.userName || "Player"}`.trim()
     : "Player";
 
-  // 🔔 Notify Buying Club Manager
+  // Notify Buying Club Manager
   await NotificationQueueHelper.sendNotification(
     transfer.requestedBy.toString(),
     `The transfer bid for ${playerName} was declined. Reason: ${reason || "No reason provided."}`,
@@ -813,7 +825,7 @@ const rejectTransferToDB = async (
     "Transfer",
   );
 
-  // 🔔 Notify Parents
+  // Notify Parents
   if (player?.parentId) {
     await NotificationQueueHelper.sendNotification(
       player.parentId.toString(),
@@ -826,7 +838,7 @@ const rejectTransferToDB = async (
     );
   }
 
-  // 🔔 Notify player: transfer rejected via background queue
+  // Notify player: transfer rejected via background queue
   await NotificationQueueHelper.sendNotification(
     transfer.player.toString(),
     `Your transfer request has been rejected. Reason: ${reason || "No reason provided."}`,
@@ -894,12 +906,12 @@ const getAvailablePlayersFromDB = async (
   }
 
   const result = await User.aggregate([
-    // 1️⃣ Filter players (Exclude Parent accounts & manager's own team players)
+    // . Filter players (Exclude Parent accounts & manager's own team players)
     {
       $match: matchConditions,
     },
 
-    // 2️⃣ Approved transfers
+    // . Approved transfers
     {
       $lookup: {
         from: "transfers",
@@ -920,7 +932,7 @@ const getAvailablePlayersFromDB = async (
       },
     },
 
-    // 3️⃣ Pending by this manager
+    // . Pending by this manager
     {
       $lookup: {
         from: "transfers",
@@ -945,7 +957,7 @@ const getAvailablePlayersFromDB = async (
       },
     },
 
-    // 4️⃣ Flags
+    // . Flags
     {
       $addFields: {
         isApproved: { $gt: [{ $size: "$approvedTransfers" }, 0] },
@@ -953,7 +965,7 @@ const getAvailablePlayersFromDB = async (
       },
     },
 
-    // 5️⃣ Filters
+    // . Filters
     {
       $match: {
         approvedTransfers: { $eq: [] },
@@ -961,7 +973,7 @@ const getAvailablePlayersFromDB = async (
       },
     },
 
-    // 7️⃣ Final projection
+    // . Final projection
     {
       $project: {
         _id: 1,
@@ -981,12 +993,12 @@ const getAvailablePlayersFromDB = async (
       },
     },
 
-    // 8️⃣ SORT
+    // . SORT
     {
       $sort: { createdAt: -1 },
     },
 
-    // 9️⃣ PAGINATION (IMPORTANT)
+    // . PAGINATION (IMPORTANT)
     {
       $facet: {
         data: [{ $skip: skip }, { $limit: limit }],
@@ -1023,7 +1035,7 @@ const getManagerTransferRequestsFromDB = async (
 
   const myTeamIds = managerTeams.map((item) => item.team);
 
-  // 📥 INCOMING REQUESTS ONLY: Requests sent by other teams for players in THIS manager's team (fromTeam)
+  // INCOMING REQUESTS ONLY: Requests sent by other teams for players in THIS manager's team (fromTeam)
   const transfers = await Transfer.find({
     fromTeam: { $in: myTeamIds },
   })
@@ -1044,7 +1056,7 @@ const getManagerTransferRequestsFromDB = async (
 
   if (!transfers.length) return [];
 
-  // 🔥 ADD USERDETAILS MANUALLY IF NEEDED
+  // ADD USERDETAILS MANUALLY IF NEEDED
   const userIds = transfers.map((t) => t.player?._id).filter(Boolean);
 
   const details = await User.find({

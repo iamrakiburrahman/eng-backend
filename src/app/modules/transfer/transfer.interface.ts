@@ -26,7 +26,7 @@ export interface ITransfer {
 
   rejectReason?: string | null;
 
-  // 🌟 Live Transfer Market Fields
+  // Live Transfer Market Fields
   isLiveMarket?: boolean;
   liveMarketListing?: Types.ObjectId | null;
   playerApproval?: IPartyApproval;

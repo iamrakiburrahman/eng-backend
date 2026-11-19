@@ -26,13 +26,13 @@ const createMatchResultToDB = async (payload: any) => {
   }
   const { league, match, team, player, eventType, minute } = payload;
 
-  // 1️⃣ VALIDATE MATCH
+  // . VALIDATE MATCH
   const matchData = await Match.findById(match);
   if (!matchData) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Match not found");
   }
 
-  // 2️⃣ VALIDATE LEAGUE
+  // . VALIDATE LEAGUE
   if (matchData.matchType === "league" && matchData.league) {
     if (String(matchData.league) !== String(league)) {
       throw new ApiError(
@@ -42,7 +42,7 @@ const createMatchResultToDB = async (payload: any) => {
     }
   }
 
-  // 3️⃣ VALIDATE TEAM IN MATCH
+  // . VALIDATE TEAM IN MATCH
   let eventTeam = team;
   if (!eventTeam && player) {
     const playerUser = await User.findById(player).select("selectTeam").lean();
@@ -63,12 +63,12 @@ const createMatchResultToDB = async (payload: any) => {
     );
   }
 
-  // 4️⃣ CHECK MATCH STATUS (Admins have master override to record/adjust match events anytime)
+  // . CHECK MATCH STATUS (Admins have master override to record/adjust match events anytime)
   if (!payload.isAdmin && matchData.status !== "live" && matchData.status !== "half_time") {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Match is not running");
   }
 
-  // 5️⃣ TIME VALIDATION
+  // . TIME VALIDATION
   const now = new Date();
   const matchStart = new Date(matchData.matchDate);
 
@@ -106,12 +106,12 @@ const createMatchResultToDB = async (payload: any) => {
     payload.minute = eventMinute;
   }
 
-  // 6️⃣ MINUTE VALIDATION
+  // . MINUTE VALIDATION
   if (eventMinute < 0 || eventMinute > 120) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid match minute");
   }
 
-  // 6.5️⃣ RAPID DUPLICATE GUARD (prevent accidental double tap / network retry duplicates)
+  // 6.. RAPID DUPLICATE GUARD (prevent accidental double tap / network retry duplicates)
   if (eventType === "goal" && player) {
     const recentDuplicate = await MatchResult.findOne({
       match,
@@ -125,7 +125,7 @@ const createMatchResultToDB = async (payload: any) => {
     }
   }
 
-  // 6.6️⃣ STRICT SINGLE MAN OF THE MATCH / PLAYER OF THE DAY GUARD
+  // 6.. STRICT SINGLE MAN OF THE MATCH / PLAYER OF THE DAY GUARD
   if (eventType === "player_of_the_day" || eventType === "man_of_the_match") {
     const existingPOTD = await MatchResult.findOne({
       match,
@@ -175,7 +175,7 @@ const createMatchResultToDB = async (payload: any) => {
     });
   }
 
-  // 6.7️⃣ AUTO-POPULATE REQUIRED EVENT META
+  // 6.. AUTO-POPULATE REQUIRED EVENT META
   if (!payload.eventMeta) {
     payload.eventMeta = {};
   }
@@ -192,7 +192,7 @@ const createMatchResultToDB = async (payload: any) => {
     payload.eventMeta.substitutionType = "in";
   }
 
-  // 7️⃣ CREATE EVENT
+  // . CREATE EVENT
   const result = await MatchResult.create(payload);
 
   // 8. UPDATE MATCH SCORE

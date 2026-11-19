@@ -25,7 +25,7 @@ const userSchema = new Schema<IUser, UserModal>(
       required: false,
       unique: true,
       lowercase: true,
-      sparse: true, // ✅ allow multiple null-safe behavior
+      sparse: true, // allow multiple null-safe behavior
     },
     password: {
       type: String,
@@ -223,7 +223,7 @@ userSchema.index({ parentId: 1, role: 1 });
 userSchema.index({ status: 1 });
 
 //
-// ✅ STATIC METHODS
+// STATIC METHODS
 //
 userSchema.statics.isExistUserById = async function (id: string) {
   return await this.findById(id);
@@ -246,8 +246,8 @@ userSchema.statics.isMatchPassword = async function (
 };
 
 //
-// ❌ IMPORTANT FIX: NO DB QUERY inside pre-save
-// ❌ removed duplicate email check (handled by unique index)
+// IMPORTANT FIX: NO DB QUERY inside pre-save
+// removed duplicate email check (handled by unique index)
 //
 userSchema.pre("save", async function () {
   if (this.isModified("password") && this.password) {
@@ -257,7 +257,7 @@ userSchema.pre("save", async function () {
     );
   }
 
-  // 💰 Dynamic Market Value calculation using conversionRate from PlayerEconomy (only if marketValue not explicitly modified)
+  // Dynamic Market Value calculation using conversionRate from PlayerEconomy (only if marketValue not explicitly modified)
   if (this.isModified("engCoine") && !this.isModified("marketValue")) {
     const pe = await PlayerEconomy.findOne();
     const rate = pe?.conversionRate ?? 10;

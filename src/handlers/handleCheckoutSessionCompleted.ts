@@ -17,7 +17,7 @@ export const handleCheckoutSessionCompleted = async (session: any) => {
   const customerId = session.customer as string | null;
 
   if (!subscriptionId) {
-    console.warn('⚠️ checkout.session.completed received without subscriptionId — skipping');
+    console.warn('checkout.session.completed received without subscriptionId — skipping');
     return;
   }
 
@@ -31,7 +31,7 @@ export const handleCheckoutSessionCompleted = async (session: any) => {
   }
 
   if (!user) {
-    console.error(`❌ User not found in DB for checkout session: ${session.id}`);
+    console.error(`User not found in DB for checkout session: ${session.id}`);
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found for completed checkout session');
   }
 
@@ -74,7 +74,7 @@ export const handleCheckoutSessionCompleted = async (session: any) => {
   // Find package by priceId
   const pkg = await Package.findOne({ stripePriceId: priceId });
   if (!pkg) {
-    console.error(`❌ Package not found for priceId: ${priceId}`);
+    console.error(`Package not found for priceId: ${priceId}`);
     throw new ApiError(StatusCodes.NOT_FOUND, `Package not found for Stripe Price ID: ${priceId}`);
   }
 

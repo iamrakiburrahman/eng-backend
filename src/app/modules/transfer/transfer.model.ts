@@ -86,7 +86,7 @@ const transferSchema = new Schema<ITransfer>(
       default: null,
     },
 
-    // 🌟 Live Transfer Market Fields
+    // Live Transfer Market Fields
     isLiveMarket: {
       type: Boolean,
       default: false,

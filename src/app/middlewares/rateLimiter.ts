@@ -26,7 +26,7 @@ export const imageLimiter = rateLimit({
   },
 });
 
-// 🔒 Authentication endpoints rate limiter: max 10 requests per 15 minutes per IP
+// Authentication endpoints rate limiter: max 10 requests per 15 minutes per IP
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -39,7 +39,7 @@ export const authLimiter = rateLimit({
   },
 });
 
-// 🔒 OTP verification limiter: max 5 requests per 5 minutes per IP
+// OTP verification limiter: max 5 requests per 5 minutes per IP
 export const otpLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 5,
@@ -52,7 +52,7 @@ export const otpLimiter = rateLimit({
   },
 });
 
-// 🔒 Click/View metric tracking limiter: max 60 requests per minute per IP to prevent spam inflation
+// Click/View metric tracking limiter: max 60 requests per minute per IP to prevent spam inflation
 export const trackingLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 60,

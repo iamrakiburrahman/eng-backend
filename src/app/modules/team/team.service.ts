@@ -126,7 +126,7 @@ const getAllTeamsFromDB = async (query: Record<string, any>) => {
     status: "active",
   }).distinct("user");
 
-  // 👥 MEMBERS COUNT (Only genuine, approved, active paid players)
+  // MEMBERS COUNT (Only genuine, approved, active paid players)
   const memberCounts = await User.aggregate([
     {
       $match: {
@@ -154,19 +154,19 @@ const getAllTeamsFromDB = async (query: Record<string, any>) => {
     },
   ]);
 
-  // 🧑‍💼 MANAGER LINKS
+  // MANAGER LINKS
   const managerLinks = await ManagerTeam.find({
     team: { $in: teamIds },
   });
 
   const managerUserIds = managerLinks.map((m) => m.manager);
 
-  // 🧑‍💼 USER DETAILS (PROFILE FROM USER MODEL)
+  // USER DETAILS (PROFILE FROM USER MODEL)
   const users = await User.find({
     _id: { $in: managerUserIds },
   }).select("profile firstName lastName userName email phone");
 
-  // 🏆 LEAGUE LINKS
+  // LEAGUE LINKS
   const leagueLinks = await LeagueTeam.find({
     team: { $in: teamIds },
   }).populate("league", "leagueName name");
@@ -287,7 +287,7 @@ const getSingleTeamFromDB = async (id: string) => {
   const leagueLinks = await LeagueTeam.find({ team: id }).populate("league", "leagueName name");
   const teamLeagueObjs = leagueLinks.map((l) => l.league).filter(Boolean);
 
-  // ⚽ RECENT MATCHES & TEAM FORM (Last 5 finished matches)
+  // RECENT MATCHES & TEAM FORM (Last 5 finished matches)
   const [finishedMatches, upcomingMatch] = await Promise.all([
     Match.find({
       $or: [{ homeTeam: teamObjectId }, { awayTeam: teamObjectId }],

@@ -524,7 +524,7 @@ const fetchLeagueSummaryStatsByTimeframe = async (
   };
 };
 
-// 🏆 LEAGUE SUMMARY (Supports timeframe=weekly | monthly | overall | all, articles excluded per request)
+// LEAGUE SUMMARY (Supports timeframe=weekly | monthly | overall | all, articles excluded per request)
 const getLeagueSummaryFromDB = async (query?: Record<string, any>): Promise<any> => {
   const { leagueName, leagueId, league, season } = query || {};
   const directLeagueId = leagueId || (league && mongoose.Types.ObjectId.isValid(league as string) ? league : null);
@@ -1224,7 +1224,7 @@ const getEnrichedPlayersWithStats = async (query?: Record<string, any>) => {
   });
 };
 
-// 1. ⚽ TOP GOAL SCORERS (Supports limit=100 for sections, Top 20 for Home, Rank Movement Arrows)
+// 1. TOP GOAL SCORERS (Supports limit=100 for sections, Top 20 for Home, Rank Movement Arrows)
 const getTopGoalScorersFromDB = async (query?: Record<string, any>) => {
   const isHome = query?.isHome === "true" || query?.home === "true";
   const defaultLimit = isHome ? 20 : 100;
@@ -1253,7 +1253,7 @@ const getTopGoalScorersFromDB = async (query?: Record<string, any>) => {
   return attachRankAndMovement(sorted, baselineCompareFn, limit);
 };
 
-// 2. 👟 TOP ASSIST PLAYERS (Supports limit=100 for sections, Top 20 for Home, Rank Movement Arrows)
+// 2. TOP ASSIST PLAYERS (Supports limit=100 for sections, Top 20 for Home, Rank Movement Arrows)
 const getTopAssistsFromDB = async (query?: Record<string, any>) => {
   const isHome = query?.isHome === "true" || query?.home === "true";
   const defaultLimit = isHome ? 20 : 100;
@@ -1282,14 +1282,14 @@ const getTopAssistsFromDB = async (query?: Record<string, any>) => {
   return attachRankAndMovement(sorted, baselineCompareFn, limit);
 };
 
-// 3. 🧤 TOP CLEAN SHEETS (Goalkeepers Only, Supports limit=100 for sections, Top 20 for Home, Rank Movement Arrows)
+// 3. TOP CLEAN SHEETS (Goalkeepers Only, Supports limit=100 for sections, Top 20 for Home, Rank Movement Arrows)
 const getTopCleanSheetsFromDB = async (query?: Record<string, any>) => {
   const isHome = query?.isHome === "true" || query?.home === "true";
   const defaultLimit = isHome ? 20 : 100;
   const limit = parseInt(query?.limit as string) || defaultLimit;
   const enriched = await getEnrichedPlayersWithStats(query);
 
-  // 🧤 Filter ONLY Goalkeepers with cleanSheets > 0
+  // Filter ONLY Goalkeepers with cleanSheets > 0
   const goalkeepers = enriched.filter((p) => {
     const pos = (p.position || "").toString().trim();
     const isGK =
@@ -1318,7 +1318,7 @@ const getTopCleanSheetsFromDB = async (query?: Record<string, any>) => {
   return attachRankAndMovement(sorted, baselineCompareFn, limit);
 };
 
-// 4. 🌟 TOP OVERALL BEST PLAYERS (Coin-wise: match-earned coins for weekly/monthly, total engCoine for overall)
+// 4. TOP OVERALL BEST PLAYERS (Coin-wise: match-earned coins for weekly/monthly, total engCoine for overall)
 const getTopOverallPlayersFromDB = async (query?: Record<string, any>) => {
   const isHome = query?.isHome === "true" || query?.home === "true";
   const defaultLimit = isHome ? 20 : 100;
@@ -1379,7 +1379,7 @@ const fetchLeaderboardByTimeframe = async (query?: Record<string, any>, tf: stri
   };
 };
 
-// 5. 🏆 UNIFIED LEADERBOARDS (Supports timeframe=weekly | monthly | overall | all)
+// 5. UNIFIED LEADERBOARDS (Supports timeframe=weekly | monthly | overall | all)
 const getLeaderboardsFromDB = async (query?: Record<string, any>): Promise<any> => {
   const requestedTf = (query?.timeframe || query?.period || "overall").toString().toLowerCase();
 

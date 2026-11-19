@@ -27,7 +27,7 @@ async function bootstrap() {
       server = app.listen(port, ipAddress, () => {
         logger.info(
           colors.yellow(
-            `♻️  Application listening on http://${ipAddress}:${port}`,
+            ` Application listening on http://${ipAddress}:${port}`,
           ),
         );
         resolve();
@@ -43,7 +43,7 @@ async function bootstrap() {
       process.send("ready");
     }
   } catch (error) {
-    errorLogger.error(colors.red("💥 Server bootstrap failed:"), error);
+    errorLogger.error(colors.red("Server bootstrap failed:"), error);
     process.exit(1);
   }
 }

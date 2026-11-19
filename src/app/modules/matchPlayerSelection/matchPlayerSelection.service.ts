@@ -8,7 +8,7 @@ import { USER_ROLES } from "../../../enums/user";
 import { NotificationQueueHelper } from "../../../helpers/bullMQ/bullHelper";
 import { NOTIFICATION_TYPE } from "../notification/notification.interface";
 
-// ⚽ Helper to verify all selected players belong to the specified team
+// Helper to verify all selected players belong to the specified team
 const validatePlayersBelongToTeam = async (players: any[], teamId: string) => {
   if (!Array.isArray(players) || players.length === 0) return;
 
@@ -35,7 +35,7 @@ const validatePlayersBelongToTeam = async (players: any[], teamId: string) => {
   }
 };
 
-// 🛡️ Helper to verify if the logged-in manager is assigned to the specified team
+// Helper to verify if the logged-in manager is assigned to the specified team
 const verifyManagerOfTeam = async (user: any, teamId: string) => {
   if (!user) {
     throw new ApiError(401, "Unauthorized access");
@@ -71,7 +71,7 @@ const verifyManagerOfTeam = async (user: any, teamId: string) => {
 const createSelectionIntoDB = async (payload: any, user: any) => {
   const { match, team, players, teamFormation } = payload;
 
-  // 🛡️ Verify logged-in manager is assigned to this team
+  // Verify logged-in manager is assigned to this team
   await verifyManagerOfTeam(user, team);
 
   if (!teamFormation) {
@@ -82,10 +82,10 @@ const createSelectionIntoDB = async (payload: any, user: any) => {
     throw new ApiError(400, "Players array is required");
   }
 
-  // ⚽ Verify all selected players belong to this team
+  // Verify all selected players belong to this team
   await validatePlayersBelongToTeam(players, team.toString());
 
-  // 🛑 Validate maxPlayersPerTeam set by Admin
+  // Validate maxPlayersPerTeam set by Admin
   // const matchData = await Match.findById(match);
   // if (matchData && (matchData as any).maxPlayersPerTeam) {
   //   const maxAllowed = (matchData as any).maxPlayersPerTeam;
@@ -148,7 +148,7 @@ const createSelectionIntoDB = async (payload: any, user: any) => {
 //     .populate("team")
 //     .populate({
 //       path: "players.player",
-//       model: "UserDetails", // 🔥 IMPORTANT FIX
+//       model: "UserDetails", // IMPORTANT FIX
 //     })
 //     .lean();
 
@@ -215,7 +215,7 @@ const getAllSelectionsFromDB = async () => {
         substitute: p.substitute,
         positionIndex: p.positionIndex,
 
-        // ✅ FLAT OUTPUT (NO nested object)
+        // FLAT OUTPUT (NO nested object)
         _id: user?._id,
         profile: user?.profile,
         firstName: user?.firstName,
@@ -246,12 +246,12 @@ const updateSelectionIntoDB = async (id: string, payload: any, user: any) => {
   if (!isExist) throw new ApiError(404, "Selection not found");
 
   const targetTeamId = payload.team || isExist.team;
-  // 🛡️ Verify logged-in manager is assigned to this team
+  // Verify logged-in manager is assigned to this team
   await verifyManagerOfTeam(user, targetTeamId.toString());
 
   const targetMatchId = payload.match || isExist.match;
   if (payload.players && Array.isArray(payload.players)) {
-    // ⚽ Verify all selected players belong to this team
+    // Verify all selected players belong to this team
     await validatePlayersBelongToTeam(payload.players, targetTeamId.toString());
 
     // const matchData = await Match.findById(targetMatchId);
@@ -296,7 +296,7 @@ const deleteSelectionFromDB = async (id: string, user: any) => {
   const isExist = await MatchPlayerSelection.findById(id);
   if (!isExist) throw new ApiError(404, "Selection not found");
 
-  // 🛡️ Verify logged-in manager is assigned to this team
+  // Verify logged-in manager is assigned to this team
   await verifyManagerOfTeam(user, isExist.team.toString());
 
   const deleted = await MatchPlayerSelection.findByIdAndDelete(id);
@@ -317,7 +317,7 @@ const getPlayersByMatchAndTeamFromDB = async (
     match: matchId,
     team: teamId,
   })
-    .sort({ createdAt: -1 }) // 👈 latest first
+    .sort({ createdAt: -1 }) // latest first
     .limit(1)
     .populate({
       path: "match",
@@ -342,7 +342,7 @@ const getPlayersByMatchAndTeamFromDB = async (
   const formattedResult = {
     ...result,
 
-    // 👇 ensure always present
+    // ensure always present
     teamFormation: result.teamFormation || "4-4-2",
 
     players: result.players.map((p: any) => {

@@ -56,7 +56,7 @@ export const corsOriginValidator = (
      return callback(new Error('Not allowed by CORS'));
 };
 export function configureMiddlewares(app: Express): void {
-     // 🔒 Secure HTTP headers via Helmet
+     // Secure HTTP headers via Helmet
      app.use(
           helmet({
                crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -64,7 +64,7 @@ export function configureMiddlewares(app: Express): void {
           })
      );
 
-     // ✅ EJS view engine for Stripe payment redirect pages
+     // EJS view engine for Stripe payment redirect pages
      app.set('view engine', 'ejs');
      app.set('views', path.join(process.cwd(), 'views'));
 
@@ -100,7 +100,7 @@ export function configureRoutes(app: Express): void {
      // Main API v1 routing under global rate limits
      app.use('/api/v1', globalLimiter, router);
 
-     // ✅ Stripe Payment redirect pages (rendered via EJS) - ⚡ Instant synchronous rendering
+     // Stripe Payment redirect pages (rendered via EJS) - Instant synchronous rendering
      app.get('/payment/success', (req: Request, res: Response) => {
           const sessionId = (req.query.session_id as string) || '';
           const rawPackage = (req.query.package as string) || '';

@@ -20,7 +20,7 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
   try {
     event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret);
   } catch (err: any) {
-    console.error("❌ Webhook signature verification failed:", err.message);
+    console.error("Webhook signature verification failed:", err.message);
     return res.status(StatusCodes.BAD_REQUEST).json({
       success: false,
       message: `Webhook signature verification failed: ${err.message || err}`,
@@ -55,12 +55,12 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
         break;
 
       default:
-        console.warn(`⚠️ Unhandled event: ${eventType}`);
+        console.warn(`Unhandled event: ${eventType}`);
         logger.warn(colors.yellow(`Unhandled event: ${eventType}`));
         break;
     }
   } catch (error: any) {
-    console.error("❌ Webhook handler error:", error);
+    console.error("Webhook handler error:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: `Webhook handler error: ${error.message || error}`,

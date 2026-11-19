@@ -5,7 +5,7 @@ import { CoinTransactionController } from "./coinTransaction.controller";
 
 const router = express.Router();
 
-// 📜 USER: View logged-in player's own coin statement & history
+// USER: View logged-in player's own coin statement & history
 router.get(
   "/my-history",
   auth(...ROLE_GROUPS.All),
@@ -19,7 +19,7 @@ router.get(
   CoinTransactionController.getPlayerCoinHistoryForAdmin
 );
 
-// 🛠️ ADMIN: Manually credit or debit coins with reason
+// ADMIN: Manually credit or debit coins with reason
 router.patch(
   "/adjust/:playerId",
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),

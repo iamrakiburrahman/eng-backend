@@ -15,7 +15,7 @@ const getTeamDashboardFromDB = async (teamId: string, userId?: string) => {
   const activeSubUserIds = await Subscription.find({
     status: "active",
   }).distinct("user");
-  // 👥 PLAYERS (Only genuine Player profiles belonging to THIS TEAM, exclude Parent accounts)
+  // PLAYERS (Only genuine Player profiles belonging to THIS TEAM, exclude Parent accounts)
   const rawPlayers = await User.find({
     selectTeam: { $in: [teamObjectId, teamId] },
     status: "APPROVED",
@@ -60,7 +60,7 @@ const getTeamDashboardFromDB = async (teamId: string, userId?: string) => {
 
   const totalPlayers = players.length;
 
-  // 📅 UPCOMING MATCHES
+  // UPCOMING MATCHES
   const upcomingMatches = await Match.find({
     $or: [{ homeTeam: teamObjectId }, { awayTeam: teamObjectId }],
     status: "upcoming",
@@ -69,7 +69,7 @@ const getTeamDashboardFromDB = async (teamId: string, userId?: string) => {
     .limit(5)
     .populate("homeTeam awayTeam", "teamName shortName teamLogo");
 
-  // 🏁 RECENT MATCHES
+  // RECENT MATCHES
   const rawRecentMatches = await Match.find({
     $or: [{ homeTeam: teamObjectId }, { awayTeam: teamObjectId }],
     status: "finished",
@@ -132,7 +132,7 @@ const getTeamDashboardFromDB = async (teamId: string, userId?: string) => {
       : null,
   }));
 
-  // 📊 MATCH RESULTS
+  // MATCH RESULTS
   const matchIds = rawRecentMatches.map((m: any) => m._id);
 
   const matchResults = await MatchResult.find({
@@ -140,7 +140,7 @@ const getTeamDashboardFromDB = async (teamId: string, userId?: string) => {
     team: teamObjectId,
   }).populate("player", "firstName lastName jerseyNumber");
 
-  // 🏟 TEAM INFO
+  // TEAM INFO
   const [team, subDoc, subscriberCount] = await Promise.all([
     Team.findById(teamObjectId).select(
       "teamName shortName teamLogo city country stadiumName coin marketValue ageGroup teamType",

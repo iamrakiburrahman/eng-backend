@@ -162,7 +162,8 @@ const getBuyingRequests = catchAsync(async (req: Request, res: Response) => {
 
 const getSingleLiveTransfer = catchAsync(async (req: Request, res: Response) => {
   const result = await LiveTransferMarketService.getSingleLiveTransferFromDB(
-    req.params.id as string
+    req.params.id as string,
+    req.user
   );
 
   sendResponse(res, {

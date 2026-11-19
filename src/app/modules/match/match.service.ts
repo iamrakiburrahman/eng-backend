@@ -1925,7 +1925,7 @@ export async function processMatchCompletion(matchDoc: any) {
   const match = await Match.findById(matchId);
   if (!match) return;
 
-  // 1. 🏆 Award Win / Draw coins according to ClubEconomy if not already awarded
+  // 1. Award Win / Draw coins according to ClubEconomy if not already awarded
   if (!match.resultCoinAwarded) {
     try {
       const ce = await ClubEconomy.findOne();
@@ -2255,7 +2255,7 @@ const updateMatchStatusInDB = async (
     }
   }
 
-  // 1️⃣ Status & Period Transitioning & Automatic Server Timestamping
+  // . Status & Period Transitioning & Automatic Server Timestamping
   if (targetStatus === "scheduled" || targetStatus === "upcoming") {
     match.status = targetStatus as any;
     match.period = targetPeriod !== undefined ? targetPeriod : null;
@@ -2387,7 +2387,7 @@ const updateMatchStatusInDB = async (
     }
   }
 
-  // 2️⃣ Allow Admin to manually overwrite timestamps & state
+  // . Allow Admin to manually overwrite timestamps & state
   if (isAdmin && typeof payload === "object") {
     if (payload.scheduledAt !== undefined)
       match.scheduledAt = payload.scheduledAt
@@ -3021,7 +3021,7 @@ const updateMatchTimerInDB = async (
     if (diff > 0) liveSeconds += diff;
   }
 
-  // 📡 Socket broadcast
+  // Socket broadcast
   const io = socketService.io;
   if (io) {
     io.emit(`match_${matchId}_timer`, {

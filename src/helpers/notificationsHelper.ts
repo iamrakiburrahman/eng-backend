@@ -33,7 +33,7 @@ export const getNotificationCategory = (
     return NOTIFICATION_CATEGORY.TRANSFERS_GOSSIP;
   }
 
-  // 2. Match Updates (🎯 red target)
+  // 2. Match Updates (red target)
   if (
     upperType.includes("MATCH") ||
     upperType.includes("CLEAN_SHEET") ||
@@ -42,7 +42,7 @@ export const getNotificationCategory = (
     return NOTIFICATION_CATEGORY.MATCH_UPDATE;
   }
 
-  // 3. Player of the Week / Honors / Profile / Rewards (🏆 yellow trophy)
+  // 3. Player of the Week / Honors / Profile / Rewards (yellow trophy)
   if (
     upperType.includes("PLAYER") ||
     upperType.includes("REWARD") ||
@@ -51,7 +51,7 @@ export const getNotificationCategory = (
     return NOTIFICATION_CATEGORY.PLAYER_OF_THE_WEEK;
   }
 
-  // 4. General News (📰 purple newspaper) - Default for News, Announcements, Auth, Subscriptions, etc.
+  // 4. General News (purple newspaper) - Default for News, Announcements, Auth, Subscriptions, etc.
   return NOTIFICATION_CATEGORY.GENERAL_NEWS;
 };
 

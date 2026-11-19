@@ -13,7 +13,7 @@ function question(query: string): Promise<string> {
 }
 
 async function main() {
-     console.log(colors.bgYellow.black('\n🧹 Queue Cleanup Utility (ENG Backend)\n'));
+     console.log(colors.bgYellow.black('\nQueue Cleanup Utility (ENG Backend)\n'));
 
      try {
           await connectToRedis();
@@ -47,7 +47,7 @@ async function main() {
                     console.log(colors.yellow('\nObliterating all queues...'));
                     for (const [name, queue] of Object.entries(queues)) {
                          await queue.obliterate({ force: true });
-                         console.log(colors.red(`   💥 ${name} queue obliterated`));
+                         console.log(colors.red(`   ${name} queue obliterated`));
                     }
                } else {
                     console.log(colors.yellow('\nObliterate cancelled.'));
@@ -56,7 +56,7 @@ async function main() {
                console.log(colors.red('\nInvalid choice.'));
           }
 
-          console.log(colors.bgGreen.black('\n✅ Operation Complete\n'));
+          console.log(colors.bgGreen.black('\nOperation Complete\n'));
           await disconnectRedis();
           rl.close();
           process.exit(0);

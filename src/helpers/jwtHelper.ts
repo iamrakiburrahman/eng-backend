@@ -5,13 +5,13 @@ const createToken = (
   secret: Secret,
   expireTime: string
 ) => {
-  // 🔥 safety check
+  // safety check
   if (!secret) {
-    throw new Error('❌ JWT secret is missing');
+    throw new Error('JWT secret is missing');
   }
 
   if (!expireTime) {
-    throw new Error('❌ JWT expire time is missing');
+    throw new Error('JWT expire time is missing');
   }
 
 
@@ -24,9 +24,9 @@ const createToken = (
 };
 
 const verifyToken = (token: string, secret: Secret) => {
-  // 🔥 safety check
+  // safety check
   if (!secret) {
-    throw new Error('❌ JWT secret is missing for verification');
+    throw new Error('JWT secret is missing for verification');
   }
 
   const decoded = jwt.verify(token, secret) as JwtPayload;

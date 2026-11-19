@@ -47,11 +47,11 @@ export async function connectToRedis() {
 
           await redisClient.connect();
           isRedisConnected = true;
-          logger.info(colors.bgBlue.white('🚀 Redis connected successfully (Main DB)'));
+          logger.info(colors.bgBlue.white('Redis connected successfully (Main DB)'));
      } catch (error) {
           errorLogger.error(colors.red('Redis connection error:'), error);
           isRedisConnected = false;
-          logger.warn(colors.yellow('⚠️  Application starting without Redis cache'));
+          logger.warn(colors.yellow(' Application starting without Redis cache'));
      }
 }
 
@@ -98,7 +98,7 @@ export async function disconnectRedis(): Promise<void> {
                if (client.isOpen) {
                     await client.quit();
                }
-               logger.info(colors.green(`✅ ${name} disconnected gracefully`));
+               logger.info(colors.green(`${name} disconnected gracefully`));
           } catch (error) {
                errorLogger.error(colors.red(`Error disconnecting ${name}:`), error);
                try {
@@ -145,7 +145,7 @@ export async function createSocketRedisClients() {
           socketPubClient = pubClient;
           socketSubClient = subClient;
 
-          logger.info(colors.cyan('🔌 Socket.io Redis Adapter connected to DB 2'));
+          logger.info(colors.cyan('Socket.io Redis Adapter connected to DB 2'));
 
           return { pubClient, subClient };
      } catch (error) {

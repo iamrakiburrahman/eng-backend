@@ -204,7 +204,7 @@ export async function closeBullMQ(): Promise<void> {
 
           await redisConnection.quit();
 
-          logger.info(colors.green('✅ All BullMQ queues closed'));
+          logger.info(colors.green('All BullMQ queues closed'));
      } catch (error) {
           errorLogger.error(colors.red('Error closing BullMQ:'), error);
           throw error;

@@ -11,7 +11,7 @@ const unlinkFile = (file: string | undefined | null) => {
     const cleanedFile = file.trim().replace(/^(\.\.[\/\\])+/, '').replace(/^\/+/, '');
     const targetPath = path.resolve(baseUploadDir, cleanedFile);
 
-    // 🔒 Path Traversal Prevention: Ensure target is strictly inside uploads directory
+    // Path Traversal Prevention: Ensure target is strictly inside uploads directory
     if (!targetPath.startsWith(baseUploadDir)) {
         return;
     }

@@ -9,7 +9,7 @@ class QueryBuilder<T> {
     this.query = query || {};
   }
 
-  // 🔍 SEARCH (FIXED)
+  // SEARCH (FIXED)
   search(fields: string[]) {
     const searchTerm = (
       this.query.searchTerm ||
@@ -55,7 +55,7 @@ class QueryBuilder<T> {
     return this;
   }
 
-  // 🔽 FILTER
+  // FILTER
   filter() {
     const queryObj = { ...this.query };
 
@@ -79,7 +79,7 @@ class QueryBuilder<T> {
 
     this.modelQuery = this.modelQuery.find(cleanedQuery);
 
-    // 🔥 PRICE RANGE FILTER
+    // PRICE RANGE FILTER
     const minPrice = Number(this.query.minPrice);
     const maxPrice = Number(this.query.maxPrice);
 
@@ -96,7 +96,7 @@ class QueryBuilder<T> {
     return this;
   }
 
-  // 🔼 SORT
+  // SORT
   sort() {
     const sortField = (this.query?.sort as string) || '-createdAt';
 
@@ -105,7 +105,7 @@ class QueryBuilder<T> {
     return this;
   }
 
-  // 📄 PAGINATION
+  // PAGINATION
   paginate() {
     const limit = Number(this.query?.limit) || 10;
     const page = Number(this.query?.page) || 1;
@@ -116,7 +116,7 @@ class QueryBuilder<T> {
     return this;
   }
 
-  // 🎯 FIELD SELECTION
+  // FIELD SELECTION
   fields() {
     const fields =
       (this.query?.fields as string)?.split(',').join(' ') || '-__v';
@@ -126,7 +126,7 @@ class QueryBuilder<T> {
     return this;
   }
 
-  // 🔗 POPULATE
+  // POPULATE
   populate(
     populateFields: string[],
     selectFields: Record<string, string> = {}
@@ -141,7 +141,7 @@ class QueryBuilder<T> {
     return this;
   }
 
-  // 📊 PAGINATION INFO
+  // PAGINATION INFO
   async getPaginationInfo() {
     const filter = this.modelQuery.getFilter();
 
@@ -160,7 +160,7 @@ class QueryBuilder<T> {
   }
 }
 
-// 🧹 CLEAN OBJECT HELPER
+// CLEAN OBJECT HELPER
 function cleanObject(obj: Record<string, any>) {
   const cleaned: Record<string, any> = {};
 

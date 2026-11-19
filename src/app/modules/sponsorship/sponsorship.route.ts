@@ -2,6 +2,7 @@ import express from 'express';
 import { USER_ROLES } from '../../../enums/user';
 import auth from '../../middlewares/auth';
 import fileUploadHandler from '../../middlewares/fileUploaderHandler';
+import { trackingLimiter } from '../../middlewares/rateLimiter';
 import { SponsorshipController } from './sponsorship.controller';
 
 const router = express.Router();
@@ -11,7 +12,7 @@ const router = express.Router();
 router.get('/showcase', SponsorshipController.getShowcaseSponsorships);
 
 // 2. PUBLIC CLICK TRACKING (Tapping sponsor/partner in Mobile App or Web)
-router.post('/:id/click', SponsorshipController.recordSponsorshipClick);
+router.post('/:id/click', trackingLimiter, SponsorshipController.recordSponsorshipClick);
 
 // 3. ADMIN ANALYTICS & REORDERING
 router.get(
