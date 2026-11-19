@@ -13,6 +13,7 @@ export interface IRecordTeamCoinTransactionParams {
   category: TEAM_COIN_CATEGORY;
   title: string;
   description?: string;
+  minBalanceAfter?: number; // 🔒 Minimum balance required to remain after deduction
   matchId?: string | Types.ObjectId;
   opponentTeamId?: string | Types.ObjectId;
   transferredPlayerId?: string | Types.ObjectId;
@@ -44,6 +45,7 @@ export const recordTeamCoinTransaction = async (
     category,
     title,
     description = "",
+    minBalanceAfter = 0,
     matchId,
     opponentTeamId,
     transferredPlayerId,
@@ -59,11 +61,6 @@ export const recordTeamCoinTransaction = async (
     return { team, transaction: null };
   }
 
-  const team = await Team.findById(teamId).session(session || null);
-  if (!team) {
-    throw new Error(`Team not found for ID: ${teamId}`);
-  }
-
   let signedAmount = Number(amount);
   if (DEDUCTION_CATEGORIES.has(category)) {
     signedAmount = -Math.abs(signedAmount);
@@ -71,18 +68,61 @@ export const recordTeamCoinTransaction = async (
     signedAmount = Math.abs(signedAmount);
   }
 
-  const balanceBefore = Number(team.coin) || 0;
-  const balanceAfter = Math.max(0, balanceBefore + signedAmount);
+  let team: any;
+  let balanceBefore: number;
+  let balanceAfter: number;
 
-  team.coin = balanceAfter;
+  if (signedAmount < 0) {
+    // 🔒 Concurrency-safe atomic deduction: check and deduct in one atomic operation
+    const minRequired = (minBalanceAfter || 0) + Math.abs(signedAmount);
+
+    team = await Team.findOneAndUpdate(
+      {
+        _id: teamId,
+        coin: { $gte: minRequired },
+      },
+      {
+        $inc: { coin: signedAmount },
+      },
+      { new: true, session: session || undefined }
+    );
+
+    if (!team) {
+      const currentTeam = await Team.findById(teamId).session(session || null);
+      const currentCoin = currentTeam?.coin || 0;
+      throw new Error(
+        `Insufficient team coin balance! Current balance: ${currentCoin}, required after deduction: ${minBalanceAfter}`
+      );
+    }
+
+    balanceAfter = Number(team.coin) || 0;
+    balanceBefore = balanceAfter - signedAmount;
+  } else {
+    // 🔒 Concurrency-safe atomic credit
+    team = await Team.findOneAndUpdate(
+      { _id: teamId },
+      { $inc: { coin: signedAmount } },
+      { new: true, session: session || undefined }
+    );
+
+    if (!team) {
+      throw new Error(`Team not found for ID: ${teamId}`);
+    }
+
+    balanceAfter = Number(team.coin) || 0;
+    balanceBefore = Math.max(0, balanceAfter - signedAmount);
+  }
 
   if (syncMarketValue) {
     const ce = await ClubEconomy.findOne().session(session || null);
     const rate = Number(ce?.conversionRate) || 10;
     team.marketValue = balanceAfter * rate;
+    await Team.findByIdAndUpdate(
+      teamId,
+      { marketValue: team.marketValue },
+      { session: session || undefined }
+    );
   }
-
-  await team.save({ session: session || undefined });
 
   const transactionData: Partial<ITeamCoinTransaction> = {
     team: team._id,

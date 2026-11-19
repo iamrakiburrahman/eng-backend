@@ -4,17 +4,20 @@ import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import { AuthController } from './auth.controller';
 import { AuthValidation } from './auth.validation';
+import { authLimiter, otpLimiter } from '../../middlewares/rateLimiter';
 // import passport from '../../../config/passport'
 const router = express.Router();
 
 router.post(
     '/login',
+    authLimiter,
     validateRequest(AuthValidation.createLoginZodSchema),
     AuthController.loginUser
 );
 
 router.post(
     '/forgot-password',
+    authLimiter,
     validateRequest(AuthValidation.createForgetPasswordZodSchema),
     AuthController.forgetPassword
 );
@@ -26,11 +29,13 @@ router.post(
 
 router.post(
     '/resend-otp',
+    authLimiter,
     AuthController.resendVerificationEmail
 );
 
 router.post(
     '/verify-email',
+    otpLimiter,
     async (req: Request, res: Response, next: NextFunction) => {
 
         try {
@@ -49,6 +54,7 @@ router.post(
 
 router.post(
     '/reset-password',
+    authLimiter,
     validateRequest(AuthValidation.createResetPasswordZodSchema),
     AuthController.resetPassword
 );

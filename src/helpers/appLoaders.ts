@@ -1,5 +1,6 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import session from 'express-session';
 import path from 'path';
 import { StatusCodes } from 'http-status-codes';
@@ -56,6 +57,14 @@ export const corsOriginValidator = (
      return callback(new Error('Not allowed by CORS'));
 };
 export function configureMiddlewares(app: Express): void {
+     // 🔒 Secure HTTP headers via Helmet
+     app.use(
+          helmet({
+               crossOriginResourcePolicy: { policy: 'cross-origin' },
+               contentSecurityPolicy: false,
+          })
+     );
+
      // ✅ EJS view engine for Stripe payment redirect pages
      app.set('view engine', 'ejs');
      app.set('views', path.join(process.cwd(), 'views'));

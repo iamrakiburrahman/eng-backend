@@ -585,26 +585,27 @@ const approveTransferToDB = async (id: string, user: any) => {
         );
       }
 
-      if ((toTeamObj.coin || 0) - playerCost < minReserveCoins) {
-        throw new ApiError(
-          StatusCodes.BAD_REQUEST,
-          `Cannot complete transfer: Target buying team has insufficient coins (${toTeamObj.coin || 0} available). A minimum balance of ${minReserveCoins.toLocaleString()} coins must be maintained (Player cost: ${playerCost.toLocaleString()} coins).`,
-        );
-      }
-
       const playerName = `${userDetails.firstName || ""} ${userDetails.lastName || userDetails.userName || "Player"}`.trim();
 
-      // Deduct from buying team with ledger history
-      await recordTeamCoinTransaction({
-        teamId: toTeamObj._id,
-        amount: -playerCost,
-        category: TEAM_COIN_CATEGORY.PLAYER_TRANSFER_BUY,
-        title: "Player Transfer Purchase",
-        description: `Purchased player ${playerName} from ${fromTeamObj?.teamName || "previous club"} for ${playerCost.toLocaleString()} coins`,
-        transferredPlayerId: userDetails._id,
-        opponentTeamId: fromTeamObj?._id,
-        transferId: transfer._id,
-      });
+      // Deduct from buying team with atomic concurrency guarantee and ledger history
+      try {
+        await recordTeamCoinTransaction({
+          teamId: toTeamObj._id,
+          amount: -playerCost,
+          category: TEAM_COIN_CATEGORY.PLAYER_TRANSFER_BUY,
+          title: "Player Transfer Purchase",
+          description: `Purchased player ${playerName} from ${fromTeamObj?.teamName || "previous club"} for ${playerCost.toLocaleString()} coins`,
+          minBalanceAfter: minReserveCoins,
+          transferredPlayerId: userDetails._id,
+          opponentTeamId: fromTeamObj?._id,
+          transferId: transfer._id,
+        });
+      } catch (coinErr: any) {
+        throw new ApiError(
+          StatusCodes.BAD_REQUEST,
+          `Cannot complete transfer: Target buying team has insufficient coins. A minimum balance of ${minReserveCoins.toLocaleString()} coins must be maintained (Player cost: ${playerCost.toLocaleString()} coins).`
+        );
+      }
 
       // 3. Add coins to selling team (fromTeam) with ledger history
       if (fromTeamObj) {

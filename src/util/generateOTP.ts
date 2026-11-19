@@ -1,5 +1,7 @@
-const generateOTP = () => {
-  return Math.floor(Math.random() * (999999 - 100000 + 1) + 100000);
+import crypto from 'crypto';
+
+const generateOTP = (): number => {
+  return crypto.randomInt(100000, 1000000);
 };
 
 export default generateOTP;

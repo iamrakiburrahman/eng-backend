@@ -4,6 +4,7 @@ import { Secret } from "jsonwebtoken";
 import config from "../../config";
 import { jwtHelper } from "../../helpers/jwtHelper";
 import ApiError from "../../errors/ApiErrors";
+import { User } from "../modules/user/user.model";
 
 const auth =
   (...args: any[]) =>
@@ -86,14 +87,36 @@ const auth =
       }
 
       // ----------------------------------------
-      // 5. Attach user
+      // 5. DB Verification (User exists and active)
       // ----------------------------------------
 
+      const userId = decoded._id || decoded.id;
+      const isExistUser = await User.findById(userId).select("role status verified email");
+
+      if (!isExistUser) {
+        if (required) {
+          throw new ApiError(StatusCodes.UNAUTHORIZED, "User account no longer exists");
+        }
+        req.user = null;
+        return next();
+      }
+
+      if (isExistUser.status === "REJECTED") {
+        if (required) {
+          throw new ApiError(
+            StatusCodes.FORBIDDEN,
+            "Your account has been suspended or rejected. Please contact support."
+          );
+        }
+        req.user = null;
+        return next();
+      }
+
       req.user = {
-        _id: decoded._id || decoded.id,
-        id: decoded._id || decoded.id,
-        email: decoded.email,
-        role: decoded.role,
+        _id: isExistUser._id.toString(),
+        id: isExistUser._id.toString(),
+        email: isExistUser.email || decoded.email,
+        role: isExistUser.role || decoded.role,
       };
 
       // ----------------------------------------

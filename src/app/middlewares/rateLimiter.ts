@@ -25,3 +25,29 @@ export const imageLimiter = rateLimit({
     message: 'Too many image requests, please try again later.',
   },
 });
+
+// 🔒 Authentication endpoints rate limiter: max 10 requests per 15 minutes per IP
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: 429,
+    message: 'Too many authentication attempts. Please try again after 15 minutes.',
+  },
+});
+
+// 🔒 OTP verification limiter: max 5 requests per 5 minutes per IP
+export const otpLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: 429,
+    message: 'Too many OTP verification attempts. Please try again after 5 minutes.',
+  },
+});

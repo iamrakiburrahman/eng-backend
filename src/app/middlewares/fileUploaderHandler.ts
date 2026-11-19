@@ -5,7 +5,7 @@ import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
 import ApiError from '../../errors/ApiErrors';
 
-const fileUploadHandler = () => {
+const fileUploadHandler = (maxSizeInMB: number = 10) => {
 
   // base upload folder
   const baseUploadDir = path.join(process.cwd(), 'uploads');
@@ -87,7 +87,6 @@ const fileUploadHandler = () => {
         'image/jpg',
         'image/webp',
         'image/gif',
-        'image/svg+xml',
       ];
       if (allowedImageTypes.includes(file.mimetype)) {
         cb(null, true);
@@ -95,7 +94,7 @@ const fileUploadHandler = () => {
         cb(
           new ApiError(
             StatusCodes.BAD_REQUEST,
-            'Only image files allowed (JPEG, PNG, JPG, WEBP, GIF, SVG)'
+            'Only image files allowed (JPEG, PNG, JPG, WEBP, GIF)'
           )
         );
       }
@@ -137,7 +136,7 @@ const fileUploadHandler = () => {
     storage,
     fileFilter,
     limits: {
-      fileSize: 1000 * 1024 * 1024, // 1000MB limit
+      fileSize: maxSizeInMB * 1024 * 1024, // Configurable limit, defaults to 10MB
     },
   }).fields([
     { name: 'image', maxCount: 3 },
